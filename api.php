@@ -44,9 +44,11 @@ if ($action === 'save_price') {
 
 if ($action === 'qrcode') {
     $post_id = (int) $_GET['post_id'];
-    $url = get_permalink($post_id);
-
-    // Add finish query param if needed to the URL, but requirement says "指向对应文章URL的二维码", so base URL is fine.
+    $finish_name = $_GET['finish'] ?? '';
+    
+    $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
+    $base_url = $protocol . "://" . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']);
+    $url = $base_url . "/view.php?post_id=" . $post_id . "&finish=" . urlencode($finish_name);
 
     $options = new QROptions([
         'version' => 5,
@@ -69,6 +71,7 @@ if ($action === 'qrcode') {
 if ($action === 'pdf') {
     $post_id = (int) $_GET['post_id'];
     $finish_name = $_GET['finish'] ?? '';
+    if (!$finish_name) die('Finish not found');
 
     $tile = get_post($post_id);
     if (!$tile || $tile->post_type !== 'tile') {
@@ -107,7 +110,9 @@ if ($action === 'pdf') {
     }
 
     // Generate QR Code base64
-    $url = get_permalink($post_id);
+    $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
+    $base_url = $protocol . "://" . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']);
+    $url = $base_url . "/view.php?post_id=" . $post_id . "&finish=" . urlencode($finish_name);
     $qr_options = new QROptions([
         'version' => 5,
         'outputInterface' => \chillerlan\QRCode\Output\QRGdImagePNG::class,
@@ -139,5 +144,99 @@ if ($action === 'pdf') {
 
     $filename = 'tile_card_' . $post_id . '_' . sanitize_title($finish_name) . '.pdf';
     $dompdf->stream($filename, array("Attachment" => false)); // Inline view
+    exit;
+}
+
+if ($action === 'export_csv') {
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename=tiles_export.csv');
+    $output = fopen('php://output', 'w');
+    fputcsv($output, ['tile_id', 'title', 'slip_rate', 'finish', 'size', 'price', 'description']);
+
+    $args = array('post_type' => 'tile', 'posts_per_page' => -1, 'post_status' => 'publish');
+    $tiles = get_posts($args);
+
+    global $pdo;
+
+    foreach ($tiles as $tile) {
+        $post_id = $tile->ID;
+        $title = $tile->post_title;
+        
+        $stmt = $pdo->prepare("SELECT * FROM tiles_meta WHERE post_id = ?");
+        $stmt->execute([$post_id]);
+        $meta = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['slip_rating' => '', 'qrcode_description' => ''];
+        $slip_rate = $meta['slip_rating'] ?? '';
+        $description = $meta['qrcode_description'] ?? '';
+
+        $finishes = function_exists('get_field') ? get_field('tile_finish', $post_id) : [];
+        if ($finishes && is_array($finishes)) {
+            foreach ($finishes as $f) {
+                $finish_name = $f['finish_name'] ?? '';
+                $sizes = $f['tile_size'] ?? [];
+                
+                if ($sizes && is_array($sizes)) {
+                    foreach ($sizes as $s) {
+                        $size_name = $s['tile_size_name'] ?? '';
+                        
+                        $stmt2 = $pdo->prepare("SELECT price FROM tile_prices WHERE post_id = ? AND finish_name = ? AND tile_size_name = ?");
+                        $stmt2->execute([$post_id, $finish_name, $size_name]);
+                        $price_row = $stmt2->fetch(PDO::FETCH_ASSOC);
+                        $price = $price_row ? $price_row['price'] : '';
+
+                        fputcsv($output, [$post_id, $title, $slip_rate, $finish_name, $size_name, $price, $description]);
+                    }
+                }
+            }
+        }
+    }
+    fclose($output);
+    exit;
+}
+
+if ($action === 'import_csv') {
+    if (!isset($_FILES['csv_file']) || $_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
+        die("Error uploading file.");
+    }
+    
+    $file = fopen($_FILES['csv_file']['tmp_name'], 'r');
+    $header = fgetcsv($file);
+    if ($header !== ['tile_id', 'title', 'slip_rate', 'finish', 'size', 'price', 'description']) {
+        die("Invalid CSV format.");
+    }
+
+    global $pdo;
+    $pdo->beginTransaction();
+    try {
+        $meta_stmt = $pdo->prepare("INSERT INTO tiles_meta (post_id, slip_rating, qrcode_description) VALUES (?, ?, ?) 
+                                    ON CONFLICT(post_id) DO UPDATE SET slip_rating = excluded.slip_rating, qrcode_description = excluded.qrcode_description");
+        $price_stmt = $pdo->prepare("INSERT INTO tile_prices (post_id, finish_name, tile_size_name, price) VALUES (?, ?, ?, ?)
+                                     ON CONFLICT(post_id, finish_name, tile_size_name) DO UPDATE SET price = excluded.price");
+        
+        while (($row = fgetcsv($file)) !== false) {
+            if (count($row) < 7) continue; // skip malformed rows
+            
+            $post_id = (int)$row[0];
+            if (!$post_id) continue;
+            
+            $slip_rate = $row[2];
+            $finish_name = $row[3];
+            $size_name = $row[4];
+            $price = $row[5];
+            $description = $row[6];
+
+            // Update tiles_meta (this will run multiple times for the same tile, last row wins as agreed)
+            $meta_stmt->execute([$post_id, $slip_rate, $description]);
+            
+            // Update tile_prices
+            $price_stmt->execute([$post_id, $finish_name, $size_name, $price]);
+        }
+        $pdo->commit();
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        die("Error importing data: " . $e->getMessage());
+    }
+    
+    fclose($file);
+    header("Location: tiles.php"); // redirect back
     exit;
 }

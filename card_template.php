@@ -6,7 +6,7 @@
     <title>Card</title>
     <style>
         @page {
-            margin: 2mm;
+            margin: 4mm 5mm 0;
             size: 64mm 47mm;
         }
 
@@ -15,9 +15,60 @@
             font-size: 8px;
             line-height: 1.2;
             margin: 0;
-            padding: 0;
             color: #000;
             overflow: hidden;
+        }
+
+        .title-box {
+            margin-bottom: 5%;
+            height: 20%;
+        }
+
+        .title {
+            font-size: 13px;
+        }
+
+        .card-body {
+            width: 100%;
+            height: 72%;
+        }
+
+        .body-left {
+            width: 50%;
+        }
+
+        .body-right {
+            width: 50%;
+            text-align: center;
+        }
+
+        .qr-img {
+            width: 75%;
+            margin-bottom: 3px;
+        }
+
+        .qr-des {
+            font-size: 7px;
+        }
+
+        .finish-title {
+            text-transform: capitalize;
+            font-size: 9px;
+            border-bottom: 1px solid #ccc;
+            margin-bottom: 5px;
+        }
+
+        .sizes-table {
+            margin-bottom: 10px;
+        }
+
+        .sizes-table li {
+            font-weight: 600;
+            font-size: 9px;
+        }
+
+        .extra-des {
+            font-size: 7px;
         }
     </style>
 </head>
@@ -29,33 +80,37 @@
             · <?= htmlspecialchars($application ?: '-') ?></div>
     </div>
 
-    <div class="finish-title">
-        <?= htmlspecialchars($selected_finish['finish_name'] ?? '-') ?>
-        <?= htmlspecialchars($meta['slip_rating'] ?: '-') ?>
-    </div>
+    <table class="card-body">
+        <td class="body-left">
+            <div class="finish-title">
+                <?= htmlspecialchars($selected_finish['finish_name'] ?? '-') ?>
+                <?= htmlspecialchars($meta['slip_rating']) ?>
+            </div>
 
-    <div class="sizes-table">
-        <?php
-        $sizes = $selected_finish['tile_size'] ?? [];
-        if ($sizes && is_array($sizes)):
-            foreach ($sizes as $size):
-                $s_name = $size['tile_size_name'] ?? '-';
-                ?>
-                <li><?= htmlspecialchars($s_name) ?></li>
+            <div class="sizes-table">
                 <?php
-            endforeach;
-        endif;
-        ?>
-    </div>
+                $sizes = $selected_finish['tile_size'] ?? [];
+                if ($sizes && is_array($sizes)):
+                    foreach ($sizes as $size):
+                        $s_name = $size['tile_size_name'] ?? '-';
+                        ?>
+                        <li><?= htmlspecialchars($s_name) ?></li>
+                        <?php
+                    endforeach;
+                endif;
+                ?>
+            </div>
 
-    <div class="qr-des">
-        <?= htmlspecialchars($meta['qrcode_description']) ?>
-    </div>
+            <div class="extra-des">
+                <?= htmlspecialchars($meta['qrcode_description']) ?>
+            </div>
+        </td>
 
-    <div class="qr-box">
-        <img class="qr-img" src="<?= $qr_image_data ?>">
-        <div class="qr-des">scan for price and more info</div>
-    </div>
+        <td class="body-right qr-box">
+            <img class="qr-img" src="<?= $qr_image_data ?>">
+            <div class="qr-des">scan for price and more info</div>
+        </td>
+    </table>
 </body>
 
 </html>
