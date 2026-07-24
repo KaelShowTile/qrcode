@@ -170,9 +170,13 @@ $tiles = get_posts($args);
         <h2>QR Code & Print Card Generator</h2>
         <div style="display: flex; gap: 10px; align-items: center;">
             <a href="api.php?action=export_csv" class="action-btn" style="background:#007bff; color:white; padding:6px 12px; text-decoration:none; border-radius:4px; font-size:14px;">Export CSV</a>
-            <button onclick="document.getElementById('csv_file').click()" class="action-btn" style="background:#28a745; color:white; border:none; padding:6px 12px; border-radius:4px; font-size:14px; cursor:pointer;">Import CSV</button>
+            <button onclick="document.getElementById('csv_file').click()" class="action-btn" style="background:#28a745; color:white; border:none; padding:6px 12px; border-radius:4px; font-size:14px; cursor:pointer;">Import (Standard)</button>
             <form id="import_form" action="api.php?action=import_csv" method="POST" enctype="multipart/form-data" style="display:none;">
                 <input type="file" name="csv_file" id="csv_file" accept=".csv" onchange="document.getElementById('import_form').submit();">
+            </form>
+            <button onclick="document.getElementById('csv_code_file').click()" class="action-btn" style="background:#17a2b8; color:white; border:none; padding:6px 12px; border-radius:4px; font-size:14px; cursor:pointer;">Import by Code</button>
+            <form id="import_code_form" action="api.php?action=import_by_code" method="POST" enctype="multipart/form-data" style="display:none;">
+                <input type="file" name="csv_code_file" id="csv_code_file" accept=".csv" onchange="document.getElementById('import_code_form').submit();">
             </form>
             <a href="logout.php" class="logout-btn">Logout</a>
         </div>
