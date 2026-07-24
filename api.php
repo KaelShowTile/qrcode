@@ -151,7 +151,7 @@ if ($action === 'export_csv') {
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename=tiles_export.csv');
     $output = fopen('php://output', 'w');
-    fputcsv($output, ['tile_id', 'title', 'slip_rate', 'finish', 'size', 'price', 'description']);
+    fputcsv($output, ['tile_id', 'title', 'slip_rate', 'finish', 'size', 'price', 'description', 'product_code']);
 
     $args = array('post_type' => 'tile', 'posts_per_page' => -1, 'post_status' => 'publish');
     $tiles = get_posts($args);
@@ -172,6 +172,7 @@ if ($action === 'export_csv') {
         if ($finishes && is_array($finishes)) {
             foreach ($finishes as $f) {
                 $finish_name = $f['finish_name'] ?? '';
+                $product_code = $f['product_code'] ?? '';
                 $sizes = $f['tile_size'] ?? [];
                 
                 if ($sizes && is_array($sizes)) {
@@ -183,7 +184,7 @@ if ($action === 'export_csv') {
                         $price_row = $stmt2->fetch(PDO::FETCH_ASSOC);
                         $price = $price_row ? $price_row['price'] : '';
 
-                        fputcsv($output, [$post_id, $title, $slip_rate, $finish_name, $size_name, $price, $description]);
+                        fputcsv($output, [$post_id, $title, $slip_rate, $finish_name, $size_name, $price, $description, $product_code]);
                     }
                 }
             }
