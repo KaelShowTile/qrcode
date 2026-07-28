@@ -15,13 +15,27 @@ $action = $_GET['action'] ?? '';
 
 if ($action === 'save_meta') {
     $post_id = (int) $_POST['post_id'];
-    $slip_rating = $_POST['slip_rating'] ?? '';
     $qrcode_description = $_POST['qrcode_description'] ?? '';
 
     global $pdo;
-    $stmt = $pdo->prepare("INSERT INTO tiles_meta (post_id, slip_rating, qrcode_description) VALUES (?, ?, ?) 
-                           ON CONFLICT(post_id) DO UPDATE SET slip_rating = excluded.slip_rating, qrcode_description = excluded.qrcode_description");
-    $stmt->execute([$post_id, $slip_rating, $qrcode_description]);
+    // We only update qrcode_description now. (slip_rating is kept in schema but ignored here)
+    $stmt = $pdo->prepare("INSERT INTO tiles_meta (post_id, qrcode_description) VALUES (?, ?) 
+                           ON CONFLICT(post_id) DO UPDATE SET qrcode_description = excluded.qrcode_description");
+    $stmt->execute([$post_id, $qrcode_description]);
+
+    echo json_encode(['success' => true]);
+    exit;
+}
+
+if ($action === 'save_finish_meta') {
+    $post_id = (int) $_POST['post_id'];
+    $finish_name = $_POST['finish_name'] ?? '';
+    $slip_rating = $_POST['slip_rating'] ?? '';
+
+    global $pdo;
+    $stmt = $pdo->prepare("INSERT INTO tile_finishes_meta (post_id, finish_name, slip_rating) VALUES (?, ?, ?)
+                           ON CONFLICT(post_id, finish_name) DO UPDATE SET slip_rating = excluded.slip_rating");
+    $stmt->execute([$post_id, $finish_name, $slip_rating]);
 
     echo json_encode(['success' => true]);
     exit;
@@ -45,7 +59,7 @@ if ($action === 'save_price') {
 if ($action === 'qrcode') {
     $post_id = (int) $_GET['post_id'];
     $finish_name = $_GET['finish'] ?? '';
-    
+
     $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
     $base_url = $protocol . "://" . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']);
     $url = $base_url . "/view.php?post_id=" . $post_id . "&finish=" . urlencode($finish_name);
@@ -71,7 +85,8 @@ if ($action === 'qrcode') {
 if ($action === 'pdf') {
     $post_id = (int) $_GET['post_id'];
     $finish_name = $_GET['finish'] ?? '';
-    if (!$finish_name) die('Finish not found');
+    if (!$finish_name)
+        die('Finish not found');
 
     $tile = get_post($post_id);
     if (!$tile || $tile->post_type !== 'tile') {
@@ -85,7 +100,12 @@ if ($action === 'pdf') {
     global $pdo;
     $stmt = $pdo->prepare("SELECT * FROM tiles_meta WHERE post_id = ?");
     $stmt->execute([$post_id]);
-    $meta = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['slip_rating' => '', 'qrcode_description' => ''];
+    $meta = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['qrcode_description' => ''];
+    
+    $slip_stmt = $pdo->prepare("SELECT slip_rating FROM tile_finishes_meta WHERE post_id = ? AND finish_name = ?");
+    $slip_stmt->execute([$post_id, $finish_name]);
+    $slip_row = $slip_stmt->fetch(PDO::FETCH_ASSOC);
+    $meta['slip_rating'] = $slip_row ? $slip_row['slip_rating'] : '';
 
     $stmt = $pdo->prepare("SELECT tile_size_name, price FROM tile_prices WHERE post_id = ? AND finish_name = ?");
     $stmt->execute([$post_id, $finish_name]);
@@ -161,11 +181,11 @@ if ($action === 'export_csv') {
     foreach ($tiles as $tile) {
         $post_id = $tile->ID;
         $title = $tile->post_title;
-        
+
         $stmt = $pdo->prepare("SELECT * FROM tiles_meta WHERE post_id = ?");
         $stmt->execute([$post_id]);
-        $meta = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['slip_rating' => '', 'qrcode_description' => ''];
-        $slip_rate = $meta['slip_rating'] ?? '';
+        $meta = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['qrcode_description' => ''];
+        $description = $meta['qrcode_description'] ?? '';
         $description = $meta['qrcode_description'] ?? '';
 
         $finishes = function_exists('get_field') ? get_field('tile_finish', $post_id) : [];
@@ -175,10 +195,15 @@ if ($action === 'export_csv') {
                 $product_code = $f['product_code'] ?? '';
                 $sizes = $f['tile_size'] ?? [];
                 
+                $slip_stmt = $pdo->prepare("SELECT slip_rating FROM tile_finishes_meta WHERE post_id = ? AND finish_name = ?");
+                $slip_stmt->execute([$post_id, $finish_name]);
+                $slip_row = $slip_stmt->fetch(PDO::FETCH_ASSOC);
+                $slip_rate = $slip_row ? $slip_row['slip_rating'] : '';
+
                 if ($sizes && is_array($sizes)) {
                     foreach ($sizes as $s) {
                         $size_name = $s['tile_size_name'] ?? '';
-                        
+
                         $stmt2 = $pdo->prepare("SELECT price FROM tile_prices WHERE post_id = ? AND finish_name = ? AND tile_size_name = ?");
                         $stmt2->execute([$post_id, $finish_name, $size_name]);
                         $price_row = $stmt2->fetch(PDO::FETCH_ASSOC);
@@ -198,36 +223,43 @@ if ($action === 'import_csv') {
     if (!isset($_FILES['csv_file']) || $_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
         die("Error uploading file.");
     }
-    
+
     $file = fopen($_FILES['csv_file']['tmp_name'], 'r');
     $header = fgetcsv($file);
-    if ($header !== ['tile_id', 'title', 'slip_rate', 'finish', 'size', 'price', 'description']) {
+    if ($header !== ['tile_id', 'title', 'slip_rate', 'finish', 'size', 'price', 'description', 'product_code']) {
         die("Invalid CSV format.");
     }
 
     global $pdo;
     $pdo->beginTransaction();
     try {
-        $meta_stmt = $pdo->prepare("INSERT INTO tiles_meta (post_id, slip_rating, qrcode_description) VALUES (?, ?, ?) 
-                                    ON CONFLICT(post_id) DO UPDATE SET slip_rating = excluded.slip_rating, qrcode_description = excluded.qrcode_description");
+        $meta_stmt = $pdo->prepare("INSERT INTO tiles_meta (post_id, qrcode_description) VALUES (?, ?) 
+                                    ON CONFLICT(post_id) DO UPDATE SET qrcode_description = excluded.qrcode_description");
+        $finish_meta_stmt = $pdo->prepare("INSERT INTO tile_finishes_meta (post_id, finish_name, slip_rating) VALUES (?, ?, ?)
+                                           ON CONFLICT(post_id, finish_name) DO UPDATE SET slip_rating = excluded.slip_rating");
         $price_stmt = $pdo->prepare("INSERT INTO tile_prices (post_id, finish_name, tile_size_name, price) VALUES (?, ?, ?, ?)
                                      ON CONFLICT(post_id, finish_name, tile_size_name) DO UPDATE SET price = excluded.price");
-        
+
         while (($row = fgetcsv($file)) !== false) {
-            if (count($row) < 7) continue; // skip malformed rows
-            
-            $post_id = (int)$row[0];
-            if (!$post_id) continue;
-            
+            if (count($row) < 7)
+                continue; // skip malformed rows
+
+            $post_id = (int) $row[0];
+            if (!$post_id)
+                continue;
+
             $slip_rate = $row[2];
             $finish_name = $row[3];
             $size_name = $row[4];
             $price = $row[5];
             $description = $row[6];
 
-            // Update tiles_meta (this will run multiple times for the same tile, last row wins as agreed)
-            $meta_stmt->execute([$post_id, $slip_rate, $description]);
-            
+            // Update tiles_meta (qrcode_description only)
+            $meta_stmt->execute([$post_id, $description]);
+
+            // Update tile_finishes_meta
+            $finish_meta_stmt->execute([$post_id, $finish_name, $slip_rate]);
+
             // Update tile_prices
             $price_stmt->execute([$post_id, $finish_name, $size_name, $price]);
         }
@@ -236,7 +268,7 @@ if ($action === 'import_csv') {
         $pdo->rollBack();
         die("Error importing data: " . $e->getMessage());
     }
-    
+
     fclose($file);
     header("Location: tiles.php"); // redirect back
     exit;
@@ -246,7 +278,7 @@ if ($action === 'import_by_code') {
     if (!isset($_FILES['csv_code_file']) || $_FILES['csv_code_file']['error'] !== UPLOAD_ERR_OK) {
         die("Error uploading file.");
     }
-    
+
     $file = fopen($_FILES['csv_code_file']['tmp_name'], 'r');
     $header = fgetcsv($file);
     // Expected header: code, size, price, slip_rate, description
@@ -281,15 +313,19 @@ if ($action === 'import_by_code') {
     try {
         $price_stmt = $pdo->prepare("INSERT INTO tile_prices (post_id, finish_name, tile_size_name, price) VALUES (?, ?, ?, ?)
                                      ON CONFLICT(post_id, finish_name, tile_size_name) DO UPDATE SET price = excluded.price");
-        
-        $meta_insert_stmt = $pdo->prepare("INSERT INTO tiles_meta (post_id, slip_rating, qrcode_description) VALUES (?, ?, ?)
-                                           ON CONFLICT(post_id) DO UPDATE SET slip_rating = excluded.slip_rating, qrcode_description = excluded.qrcode_description");
-        
+
+        $meta_insert_stmt = $pdo->prepare("INSERT INTO tiles_meta (post_id, qrcode_description) VALUES (?, ?)
+                                           ON CONFLICT(post_id) DO UPDATE SET qrcode_description = excluded.qrcode_description");
+                                           
+        $finish_meta_insert_stmt = $pdo->prepare("INSERT INTO tile_finishes_meta (post_id, finish_name, slip_rating) VALUES (?, ?, ?)
+                                                  ON CONFLICT(post_id, finish_name) DO UPDATE SET slip_rating = excluded.slip_rating");
+
         $get_meta_stmt = $pdo->prepare("SELECT * FROM tiles_meta WHERE post_id = ?");
 
         while (($row = fgetcsv($file)) !== false) {
-            if (count($row) < 3) continue; // skip malformed rows
-            
+            if (count($row) < 3)
+                continue; // skip malformed rows
+
             $code = $row[0];
             $size = $row[1];
             $price = $row[2];
@@ -299,22 +335,22 @@ if ($action === 'import_by_code') {
             if (!isset($code_map[$code])) {
                 continue; // code not found in WordPress, skip this row
             }
-            
+
             $post_id = $code_map[$code]['post_id'];
             $finish_name = $code_map[$code]['finish_name'];
 
             // Update tile_prices
             $price_stmt->execute([$post_id, $finish_name, $size, $price]);
 
-            // Update tiles_meta conditionally
-            if (trim($slip_rate) !== '' || trim($description) !== '') {
+            if (trim($slip_rate) !== '') {
+                $finish_meta_insert_stmt->execute([$post_id, $finish_name, $slip_rate]);
+            }
+
+            if (trim($description) !== '') {
                 $get_meta_stmt->execute([$post_id]);
                 $existing = $get_meta_stmt->fetch(PDO::FETCH_ASSOC);
-                
-                $new_slip = trim($slip_rate) !== '' ? $slip_rate : ($existing['slip_rating'] ?? '');
                 $new_desc = trim($description) !== '' ? $description : ($existing['qrcode_description'] ?? '');
-                
-                $meta_insert_stmt->execute([$post_id, $new_slip, $new_desc]);
+                $meta_insert_stmt->execute([$post_id, $new_desc]);
             }
         }
         $pdo->commit();
@@ -322,7 +358,7 @@ if ($action === 'import_by_code') {
         $pdo->rollBack();
         die("Error importing data: " . $e->getMessage());
     }
-    
+
     fclose($file);
     header("Location: tiles.php");
     exit;

@@ -18,4 +18,10 @@ CREATE TABLE IF NOT EXISTS tile_prices (
     price TEXT,
     PRIMARY KEY (post_id, finish_name, tile_size_name)
 );
+CREATE TABLE IF NOT EXISTS tile_finishes_meta (
+    post_id INTEGER,
+    finish_name TEXT,
+    slip_rating TEXT,
+    PRIMARY KEY (post_id, finish_name)
+);
 ");

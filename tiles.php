@@ -58,7 +58,7 @@ $tiles = get_posts($args);
         .tile-row-1 {
             display: grid;
             grid-template-columns: 2fr 1fr 1fr 1fr 2fr 1fr 100px;
-            gap: 10px;
+            gap: 20px;
             padding: 15px;
             background: #fafbfc;
             border-bottom: 1px solid #e1e4e8;
@@ -169,14 +169,24 @@ $tiles = get_posts($args);
     <div class="header">
         <h2>QR Code & Print Card Generator</h2>
         <div style="display: flex; gap: 10px; align-items: center;">
-            <a href="api.php?action=export_csv" class="action-btn" style="background:#007bff; color:white; padding:6px 12px; text-decoration:none; border-radius:4px; font-size:14px;">Export CSV</a>
-            <button onclick="document.getElementById('csv_file').click()" class="action-btn" style="background:#28a745; color:white; border:none; padding:6px 12px; border-radius:4px; font-size:14px; cursor:pointer;">Import (Standard)</button>
-            <form id="import_form" action="api.php?action=import_csv" method="POST" enctype="multipart/form-data" style="display:none;">
-                <input type="file" name="csv_file" id="csv_file" accept=".csv" onchange="document.getElementById('import_form').submit();">
+            <a href="api.php?action=export_csv" class="action-btn"
+                style="background:#007bff; color:white; padding:6px 12px; text-decoration:none; border-radius:4px; font-size:14px;">Export
+                CSV</a>
+            <button onclick="document.getElementById('csv_file').click()" class="action-btn"
+                style="background:#28a745; color:white; border:none; padding:6px 12px; border-radius:4px; font-size:14px; cursor:pointer;">Import
+                (Standard)</button>
+            <form id="import_form" action="api.php?action=import_csv" method="POST" enctype="multipart/form-data"
+                style="display:none;">
+                <input type="file" name="csv_file" id="csv_file" accept=".csv"
+                    onchange="document.getElementById('import_form').submit();">
             </form>
-            <button onclick="document.getElementById('csv_code_file').click()" class="action-btn" style="background:#17a2b8; color:white; border:none; padding:6px 12px; border-radius:4px; font-size:14px; cursor:pointer;">Import by Code</button>
-            <form id="import_code_form" action="api.php?action=import_by_code" method="POST" enctype="multipart/form-data" style="display:none;">
-                <input type="file" name="csv_code_file" id="csv_code_file" accept=".csv" onchange="document.getElementById('import_code_form').submit();">
+            <button onclick="document.getElementById('csv_code_file').click()" class="action-btn"
+                style="background:#17a2b8; color:white; border:none; padding:6px 12px; border-radius:4px; font-size:14px; cursor:pointer;">Import
+                by Code</button>
+            <form id="import_code_form" action="api.php?action=import_by_code" method="POST"
+                enctype="multipart/form-data" style="display:none;">
+                <input type="file" name="csv_code_file" id="csv_code_file" accept=".csv"
+                    onchange="document.getElementById('import_code_form').submit();">
             </form>
             <a href="logout.php" class="logout-btn">Logout</a>
         </div>
@@ -204,6 +214,14 @@ $tiles = get_posts($args);
         foreach ($prices_raw as $row) {
             $prices[$row['finish_name']][$row['tile_size_name']] = $row['price'];
         }
+
+        $stmt = $pdo->prepare("SELECT finish_name, slip_rating FROM tile_finishes_meta WHERE post_id = ?");
+        $stmt->execute([$tile->ID]);
+        $finishes_meta_raw = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $finishes_meta = [];
+        foreach ($finishes_meta_raw as $row) {
+            $finishes_meta[$row['finish_name']] = $row['slip_rating'];
+        }
         ?>
         <div class="tile-card" data-post-id="<?= $tile->ID ?>">
             <!-- Row 1 -->
@@ -220,11 +238,7 @@ $tiles = get_posts($args);
                     <div class="col-title">Application</div>
                     <div class="col-value"><?= htmlspecialchars($application ?: '-') ?></div>
                 </div>
-                <div>
-                    <div class="col-title">Slip Rating</div>
-                    <div><input type="text" class="input-meta" name="slip_rating"
-                            value="<?= htmlspecialchars($meta['slip_rating']) ?>" placeholder="e.g. R10"></div>
-                </div>
+
                 <div>
                     <div class="col-title">QR Code Desc</div>
                     <div><input type="text" class="input-meta" name="qrcode_description"
@@ -248,13 +262,25 @@ $tiles = get_posts($args);
                         $f_name = $finish['finish_name'] ?? '';
                         $f_code = $finish['product_code'] ?? '';
                         $sizes = $finish['tile_size'] ?? [];
+                        $f_slip = $finishes_meta[$f_name] ?? '';
                         ?>
                         <div class="finish-block">
                             <div class="finish-header">
-                                <div>
-                                    <span style="color:#24292e;">Finish: <strong><?= htmlspecialchars($f_name) ?></strong></span>
-                                    <span style="color:#6a737d; font-size:12px; margin-left:10px;">(Code:
-                                        <?= htmlspecialchars($f_code) ?>)</span>
+                                <div style="display: flex; align-items: center; gap: 25px;">
+                                    <div>
+                                        <span style="color:#24292e;">Finish:
+                                            <strong><?= htmlspecialchars($f_name) ?></strong></span>
+                                        <span style="color:#6a737d; font-size:12px; margin-left:10px;">(Code:
+                                            <?= htmlspecialchars($f_code) ?>)</span>
+                                    </div>
+                                    <div style="display: flex; align-items: center; gap: 5px;">
+                                        <span style="font-size: 13px; color: #586069; font-weight: 400; margin-right: 1px;">Slip
+                                            Rating:</span>
+                                        <input type="text" value="<?= htmlspecialchars($f_slip) ?>"
+                                            style="padding: 4px; border: 1px solid #d1d5da; border-radius: 3px; font-size: 13px; width: 120px;"
+                                            onblur="saveFinishMeta(<?= $tile->ID ?>, '<?= htmlspecialchars(addslashes($f_name)) ?>', this.value)"
+                                            placeholder="e.g. P5">
+                                    </div>
                                 </div>
                                 <div class="actions">
                                     <a href="api.php?action=qrcode&post_id=<?= $tile->ID ?>&finish=<?= urlencode($f_name) ?>"
@@ -300,7 +326,6 @@ $tiles = get_posts($args);
 
         function saveMeta(postId, btn) {
             const card = document.querySelector(`.tile-card[data-post-id="${postId}"]`);
-            const slipRating = card.querySelector('input[name="slip_rating"]').value;
             const qrDesc = card.querySelector('input[name="qrcode_description"]').value;
 
             btn.textContent = 'Saving...';
@@ -308,7 +333,7 @@ $tiles = get_posts($args);
             fetch('api.php?action=save_meta', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `post_id=${postId}&slip_rating=${encodeURIComponent(slipRating)}&qrcode_description=${encodeURIComponent(qrDesc)}`
+                body: `post_id=${postId}&qrcode_description=${encodeURIComponent(qrDesc)}`
             })
                 .then(r => r.json())
                 .then(data => {
@@ -328,6 +353,19 @@ $tiles = get_posts($args);
                 .then(data => {
                     if (data.success) showToast('Price saved!');
                     else alert('Failed to save price');
+                });
+        }
+
+        function saveFinishMeta(postId, finishName, slipRating) {
+            fetch('api.php?action=save_finish_meta', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `post_id=${postId}&finish_name=${encodeURIComponent(finishName)}&slip_rating=${encodeURIComponent(slipRating)}`
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) showToast('Slip rating saved!');
+                    else alert('Failed to save slip rating');
                 });
         }
     </script>
