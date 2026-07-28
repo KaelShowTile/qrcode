@@ -11,6 +11,9 @@ if (!is_app_logged_in()) {
     die('Unauthorized');
 }
 
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
 $action = $_GET['action'] ?? '';
 
 if ($action === 'save_meta') {
@@ -134,7 +137,7 @@ if ($action === 'pdf') {
     $base_url = $protocol . "://" . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']);
     $url = $base_url . "/view.php?post_id=" . $post_id . "&finish=" . urlencode($finish_name);
     $qr_options = new QROptions([
-        'version' => 5,
+        'version' => \chillerlan\QRCode\Common\Version::AUTO,
         'outputInterface' => \chillerlan\QRCode\Output\QRGdImagePNG::class,
         'eccLevel' => \chillerlan\QRCode\Common\EccLevel::L,
         'scale' => 3,
@@ -164,6 +167,118 @@ if ($action === 'pdf') {
 
     $filename = 'tile_card_' . $post_id . '_' . sanitize_title($finish_name) . '.pdf';
     $dompdf->stream($filename, array("Attachment" => false)); // Inline view
+    exit;
+}
+
+if ($action === 'print_sheet') {
+    $raw_data = isset($_POST['print_data']) ? stripslashes($_POST['print_data']) : '';
+    $data = json_decode($raw_data, true);
+    
+    if (!$data || !is_array($data)) {
+        die("No print data received. Please try again.");
+    }
+    
+    global $pdo;
+    $print_items = [];
+    $total_cards = 0;
+    
+    // Increase limits for intensive DOMPDF rendering
+    ini_set('memory_limit', '512M');
+    set_time_limit(120);
+    
+    // QR generator setup
+    $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
+    $base_url = $protocol . "://" . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']);
+    $qr_options = new QROptions([
+        'version' => \chillerlan\QRCode\Common\Version::AUTO,
+        'outputInterface' => \chillerlan\QRCode\Output\QRGdImagePNG::class,
+        'eccLevel' => \chillerlan\QRCode\Common\EccLevel::L,
+        'scale' => 3,
+        'addQuietzone' => false
+    ]);
+    $qrcode = new QRCode($qr_options);
+
+    foreach ($data as $req) {
+        $post_id = (int) $req['post_id'];
+        $finish_name = $req['finish_name'] ?? '';
+        $amount = (int) $req['amount'];
+        if ($amount < 1) $amount = 1;
+        
+        $tile = get_post($post_id);
+        if (!$tile || $tile->post_type !== 'tile') continue;
+        
+        $material = function_exists('get_field') ? get_field('tile_material', $post_id) : '';
+        $application = function_exists('get_field') ? get_field('tile_application', $post_id) : '';
+        $finishes = function_exists('get_field') ? get_field('tile_finish', $post_id) : [];
+        
+        // Find selected finish sizes
+        $selected_sizes = [];
+        if ($finishes && is_array($finishes)) {
+            foreach ($finishes as $f) {
+                if (($f['finish_name'] ?? '') === $finish_name) {
+                    if (isset($f['tile_size']) && is_array($f['tile_size'])) {
+                        foreach ($f['tile_size'] as $s) {
+                            $selected_sizes[] = $s['tile_size_name'] ?? '-';
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        
+        // Meta description
+        $stmt = $pdo->prepare("SELECT * FROM tiles_meta WHERE post_id = ?");
+        $stmt->execute([$post_id]);
+        $meta = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['qrcode_description' => ''];
+        $desc = $meta['qrcode_description'] ?? '';
+        
+        // Slip rating
+        $slip_stmt = $pdo->prepare("SELECT slip_rating FROM tile_finishes_meta WHERE post_id = ? AND finish_name = ?");
+        $slip_stmt->execute([$post_id, $finish_name]);
+        $slip_row = $slip_stmt->fetch(PDO::FETCH_ASSOC);
+        $slip = $slip_row ? $slip_row['slip_rating'] : '';
+        
+        // QR Code
+        $url = $base_url . "/view.php?post_id=" . $post_id . "&finish=" . urlencode($finish_name);
+        $qr_image_data = $qrcode->render($url);
+        
+        $item = [
+            'title' => $tile->post_title,
+            'material' => $material,
+            'application' => $application,
+            'finish_name' => $finish_name,
+            'slip_rating' => $slip,
+            'sizes' => $selected_sizes,
+            'description' => $desc,
+            'qr_base64' => $qr_image_data
+        ];
+        
+        for ($i = 0; $i < $amount; $i++) {
+            if ($total_cards >= 18) break 2;
+            $print_items[] = $item;
+            $total_cards++;
+        }
+    }
+    
+    if (empty($print_items)) {
+        die("No items to print.");
+    }
+    
+    // Render HTML using sheet template
+    ob_start();
+    include __DIR__ . '/sheet_template.php';
+    $html = ob_get_clean();
+
+    $options = new Options();
+    $options->set('isHtml5ParserEnabled', true);
+    $options->set('isRemoteEnabled', true);
+
+    $dompdf = new Dompdf($options);
+    $dompdf->loadHtml($html);
+    $dompdf->setPaper('A4', 'portrait');
+    $dompdf->render();
+
+    $dompdf->stream("print_sheet.pdf", array("Attachment" => false));
     exit;
 }
 

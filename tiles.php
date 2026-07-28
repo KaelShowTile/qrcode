@@ -162,6 +162,9 @@ $tiles = get_posts($args);
         .size-row.price-row {
             display: inline-block;
         }
+        .finish-block-active {
+            background-color: #fff8c5;
+        }
     </style>
 </head>
 
@@ -189,6 +192,10 @@ $tiles = get_posts($args);
                     onchange="document.getElementById('import_code_form').submit();">
             </form>
             <a href="logout.php" class="logout-btn">Logout</a>
+            <button id="btn_print_sheet" class="action-btn" style="background:#6f42c1; color:white; border:none; padding:6px 12px; border-radius:4px; font-size:14px; cursor:pointer;" onclick="submitPrintSheet()">Print Sheet (0)</button>
+            <form id="print_sheet_form" action="api.php?action=print_sheet" method="POST" target="_blank" style="display:none;">
+                <input type="hidden" name="print_data" id="print_data_input">
+            </form>
         </div>
     </div>
 
@@ -280,6 +287,10 @@ $tiles = get_posts($args);
                                             style="padding: 4px; border: 1px solid #d1d5da; border-radius: 3px; font-size: 13px; width: 120px;"
                                             onblur="saveFinishMeta(<?= $tile->ID ?>, '<?= htmlspecialchars(addslashes($f_name)) ?>', this.value)"
                                             placeholder="e.g. P5">
+                                        <div style="margin-left:15px; display:flex; align-items:center; gap:5px; font-size: 13px;">
+                                            <input type="checkbox" class="print-checkbox" data-post-id="<?= $tile->ID ?>" data-finish="<?= htmlspecialchars(addslashes($f_name)) ?>"> Add to Print
+                                            <input type="number" class="print-amount" value="1" min="1" max="18" style="width: 40px; display: none; padding: 4px; border: 1px solid #d1d5da; border-radius: 3px;">
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="actions">
@@ -367,6 +378,77 @@ $tiles = get_posts($args);
                     if (data.success) showToast('Slip rating saved!');
                     else alert('Failed to save slip rating');
                 });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const checkboxes = document.querySelectorAll('.print-checkbox');
+            const amounts = document.querySelectorAll('.print-amount');
+            const btnPrintSheet = document.getElementById('btn_print_sheet');
+            
+            function updatePrintSheet() {
+                let total = 0;
+                document.querySelectorAll('.print-checkbox:checked').forEach(cb => {
+                    const amtInput = cb.nextElementSibling;
+                    let val = parseInt(amtInput.value) || 1;
+                    if (total + val > 18) {
+                        val = 18 - total;
+                        amtInput.value = val;
+                    }
+                    total += val;
+                });
+                
+                btnPrintSheet.textContent = `Print Sheet (${total})`;
+                
+                // Disable unchecked if total >= 18
+                document.querySelectorAll('.print-checkbox').forEach(cb => {
+                    if (!cb.checked) {
+                        cb.disabled = (total >= 18);
+                    }
+                });
+            }
+            
+            checkboxes.forEach(cb => {
+                cb.addEventListener('change', (e) => {
+                    const block = e.target.closest('.finish-block');
+                    const amtInput = e.target.nextElementSibling;
+                    if (e.target.checked) {
+                        block.classList.add('finish-block-active');
+                        amtInput.style.display = 'inline-block';
+                    } else {
+                        block.classList.remove('finish-block-active');
+                        amtInput.style.display = 'none';
+                    }
+                    updatePrintSheet();
+                });
+            });
+            
+            amounts.forEach(amt => {
+                amt.addEventListener('input', () => {
+                    let val = parseInt(amt.value);
+                    if (isNaN(val) || val < 1) amt.value = 1;
+                    updatePrintSheet();
+                });
+            });
+        });
+
+        function submitPrintSheet() {
+            let data = [];
+            document.querySelectorAll('.print-checkbox:checked').forEach(cb => {
+                const amt = parseInt(cb.nextElementSibling.value) || 1;
+                data.push({
+                    post_id: cb.getAttribute('data-post-id'),
+                    finish_name: cb.getAttribute('data-finish'),
+                    amount: amt
+                });
+            });
+            
+            if (data.length === 0) {
+                alert("Please add at least one card to print.");
+                return;
+            }
+            
+            document.getElementById('print_data_input').value = JSON.stringify(data);
+            document.getElementById('print_sheet_form').submit();
         }
     </script>
 </body>

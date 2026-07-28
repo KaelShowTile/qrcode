@@ -6,8 +6,8 @@
     <title>Card</title>
     <style>
         @page {
-            margin: 4mm 5mm 0;
-            size: 64mm 47mm;
+            margin: 6mm 7mm 0;
+            size: 63.5mm 46.6mm;
         }
 
         body {
@@ -17,6 +17,10 @@
             margin: 0;
             color: #000;
             overflow: hidden;
+        }
+
+        li {
+            font-family: sans-serif;
         }
 
         .title-box {
