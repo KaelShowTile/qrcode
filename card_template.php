@@ -8,6 +8,7 @@
         @page {
             margin: 6mm 7mm 0;
             size: 63.5mm 46.6mm;
+            font-family: sans-serif;
         }
 
         body {
@@ -57,7 +58,7 @@
 
         .finish-title {
             text-transform: capitalize;
-            font-size: 9px;
+            font-size: 10px;
             border-bottom: 1px solid #ccc;
             margin-bottom: 5px;
         }
@@ -68,11 +69,12 @@
 
         .sizes-table li {
             font-weight: 600;
-            font-size: 9px;
+            font-size: 10px;
+            font-family: sans-serif;
         }
 
         .extra-des {
-            font-size: 7px;
+            font-size: 10px;
         }
     </style>
 </head>

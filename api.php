@@ -196,7 +196,6 @@ if ($action === 'print_sheet') {
         'scale' => 3,
         'addQuietzone' => false
     ]);
-    $qrcode = new QRCode($qr_options);
 
     foreach ($data as $req) {
         $post_id = (int) $req['post_id'];
@@ -240,6 +239,7 @@ if ($action === 'print_sheet') {
         
         // QR Code
         $url = $base_url . "/view.php?post_id=" . $post_id . "&finish=" . urlencode($finish_name);
+        $qrcode = new QRCode($qr_options);
         $qr_image_data = $qrcode->render($url);
         
         $item = [

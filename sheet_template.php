@@ -8,6 +8,7 @@
         @page {
             margin: 0;
             size: A4 portrait;
+            font-family: sans-serif;
         }
 
         body {
@@ -66,7 +67,7 @@
 
         .finish-title {
             text-transform: capitalize;
-            font-size: 9px;
+            font-size: 10px;
             border-bottom: 1px solid #ccc;
             margin-bottom: 5px;
         }
@@ -79,14 +80,15 @@
 
         .sizes-table li {
             font-weight: 600;
-            font-size: 9px;
+            font-size: 10px;
             margin-left: 10px;
             display: list-item;
             list-style-type: disc;
+            font-family: sans-serif;
         }
 
         .extra-des {
-            font-size: 7px;
+            font-size: 10px;
         }
     </style>
 </head>
@@ -96,7 +98,7 @@
         // Calculate coordinates
         $col = $index % 3;
         $row = floor($index / 3);
-        $left = 3 + (66) * $col; // 63.5 + 2.5 = 66
+        $left = 1 + (66) * $col; // 63.5 + 2.5 = 66
         $top = 8 + (46.6) * $row;
         ?>
         <div class="card-container" style="left: <?= $left ?>mm; top: <?= $top ?>mm;">

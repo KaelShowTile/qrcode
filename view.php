@@ -211,7 +211,8 @@ if (!$thumbnail_url) {
             <?php endif; ?>
         </div>
 
-        <a href="<?= $wp_url ?>" class="btn-visit">View Collection</a>
+        <a href="<?= $wp_url ?>?utm_source=showroom&utm_medium=qrcode&utm_campaign=showroom" class="btn-visit">View
+            Collection</a>
     </div>
 
 </body>

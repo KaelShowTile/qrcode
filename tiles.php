@@ -26,7 +26,7 @@ $tiles = get_posts($args);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background: #f4f6f8;
             margin: 0;
-            padding: 20px;
+            padding: 0 20px 20px;
             color: #333;
         }
 
@@ -34,7 +34,10 @@ $tiles = get_posts($args);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
+            position: fixed;
+            background: #f4f6f8;
+            width: calc(100% - 40px);
+            padding-top: 10px;
         }
 
         .logout-btn {
@@ -162,6 +165,7 @@ $tiles = get_posts($args);
         .size-row.price-row {
             display: inline-block;
         }
+
         .finish-block-active {
             background-color: #fff8c5;
         }
@@ -192,8 +196,11 @@ $tiles = get_posts($args);
                     onchange="document.getElementById('import_code_form').submit();">
             </form>
             <a href="logout.php" class="logout-btn">Logout</a>
-            <button id="btn_print_sheet" class="action-btn" style="background:#6f42c1; color:white; border:none; padding:6px 12px; border-radius:4px; font-size:14px; cursor:pointer;" onclick="submitPrintSheet()">Print Sheet (0)</button>
-            <form id="print_sheet_form" action="api.php?action=print_sheet" method="POST" target="_blank" style="display:none;">
+            <button id="btn_print_sheet" class="action-btn"
+                style="background:#6f42c1; color:white; border:none; padding:6px 12px; border-radius:4px; font-size:14px; cursor:pointer;"
+                onclick="submitPrintSheet()">Print Sheet (0)</button>
+            <form id="print_sheet_form" action="api.php?action=print_sheet" method="POST" target="_blank"
+                style="display:none;">
                 <input type="hidden" name="print_data" id="print_data_input">
             </form>
         </div>
@@ -201,131 +208,137 @@ $tiles = get_posts($args);
 
     <div id="toast" class="toast">Saved successfully!</div>
 
-    <?php foreach ($tiles as $tile):
-        // WP Data
-        $material = function_exists('get_field') ? get_field('tile_material', $tile->ID) : '';
-        $application = function_exists('get_field') ? get_field('tile_application', $tile->ID) : '';
-        $finishes = function_exists('get_field') ? get_field('tile_finish', $tile->ID) : [];
-        $url = get_permalink($tile->ID);
+    <div id="tile_list" style="padding-top: 100px;">
+        <?php foreach ($tiles as $tile):
+            // WP Data
+            $material = function_exists('get_field') ? get_field('tile_material', $tile->ID) : '';
+            $application = function_exists('get_field') ? get_field('tile_application', $tile->ID) : '';
+            $finishes = function_exists('get_field') ? get_field('tile_finish', $tile->ID) : [];
+            $url = get_permalink($tile->ID);
 
-        // SQLite Data
-        global $pdo;
-        $stmt = $pdo->prepare("SELECT * FROM tiles_meta WHERE post_id = ?");
-        $stmt->execute([$tile->ID]);
-        $meta = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['slip_rating' => '', 'qrcode_description' => ''];
+            // SQLite Data
+            global $pdo;
+            $stmt = $pdo->prepare("SELECT * FROM tiles_meta WHERE post_id = ?");
+            $stmt->execute([$tile->ID]);
+            $meta = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['slip_rating' => '', 'qrcode_description' => ''];
 
-        $stmt = $pdo->prepare("SELECT finish_name, tile_size_name, price FROM tile_prices WHERE post_id = ?");
-        $stmt->execute([$tile->ID]);
-        $prices_raw = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        $prices = [];
-        foreach ($prices_raw as $row) {
-            $prices[$row['finish_name']][$row['tile_size_name']] = $row['price'];
-        }
+            $stmt = $pdo->prepare("SELECT finish_name, tile_size_name, price FROM tile_prices WHERE post_id = ?");
+            $stmt->execute([$tile->ID]);
+            $prices_raw = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $prices = [];
+            foreach ($prices_raw as $row) {
+                $prices[$row['finish_name']][$row['tile_size_name']] = $row['price'];
+            }
 
-        $stmt = $pdo->prepare("SELECT finish_name, slip_rating FROM tile_finishes_meta WHERE post_id = ?");
-        $stmt->execute([$tile->ID]);
-        $finishes_meta_raw = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        $finishes_meta = [];
-        foreach ($finishes_meta_raw as $row) {
-            $finishes_meta[$row['finish_name']] = $row['slip_rating'];
-        }
-        ?>
-        <div class="tile-card" data-post-id="<?= $tile->ID ?>">
-            <!-- Row 1 -->
-            <div class="tile-row-1">
-                <div>
-                    <div class="col-title">Title</div>
-                    <div class="col-value"><strong><?= htmlspecialchars($tile->post_title) ?></strong></div>
-                </div>
-                <div>
-                    <div class="col-title">Material</div>
-                    <div class="col-value"><?= htmlspecialchars($material ?: '-') ?></div>
-                </div>
-                <div>
-                    <div class="col-title">Application</div>
-                    <div class="col-value"><?= htmlspecialchars($application ?: '-') ?></div>
+            $stmt = $pdo->prepare("SELECT finish_name, slip_rating FROM tile_finishes_meta WHERE post_id = ?");
+            $stmt->execute([$tile->ID]);
+            $finishes_meta_raw = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $finishes_meta = [];
+            foreach ($finishes_meta_raw as $row) {
+                $finishes_meta[$row['finish_name']] = $row['slip_rating'];
+            }
+            ?>
+            <div class="tile-card" data-post-id="<?= $tile->ID ?>">
+                <!-- Row 1 -->
+                <div class="tile-row-1">
+                    <div>
+                        <div class="col-title">Title</div>
+                        <div class="col-value"><strong><?= htmlspecialchars($tile->post_title) ?></strong></div>
+                    </div>
+                    <div>
+                        <div class="col-title">Material</div>
+                        <div class="col-value"><?= htmlspecialchars($material ?: '-') ?></div>
+                    </div>
+                    <div>
+                        <div class="col-title">Application</div>
+                        <div class="col-value"><?= htmlspecialchars($application ?: '-') ?></div>
+                    </div>
+
+                    <div>
+                        <div class="col-title">QR Code Desc</div>
+                        <div><input type="text" class="input-meta" name="qrcode_description"
+                                value="<?= htmlspecialchars($meta['qrcode_description']) ?>" placeholder="Description..."
+                                maxlength="70"></div>
+                    </div>
+                    <div>
+                        <div class="col-title">URL</div>
+                        <div class="col-value"><a href="<?= $url ?>" target="_blank"
+                                style="color:#0366d6; text-decoration:none; font-size:12px;">View Post</a></div>
+                    </div>
+                    <div>
+                        <div class="col-title">Action</div>
+                        <button class="btn btn-save" onclick="saveMeta(<?= $tile->ID ?>, this)">Save Meta</button>
+                    </div>
                 </div>
 
-                <div>
-                    <div class="col-title">QR Code Desc</div>
-                    <div><input type="text" class="input-meta" name="qrcode_description"
-                            value="<?= htmlspecialchars($meta['qrcode_description']) ?>" placeholder="Description..."></div>
-                </div>
-                <div>
-                    <div class="col-title">URL</div>
-                    <div class="col-value"><a href="<?= $url ?>" target="_blank"
-                            style="color:#0366d6; text-decoration:none; font-size:12px;">View Post</a></div>
-                </div>
-                <div>
-                    <div class="col-title">Action</div>
-                    <button class="btn btn-save" onclick="saveMeta(<?= $tile->ID ?>, this)">Save Meta</button>
-                </div>
-            </div>
-
-            <!-- Row 2 -->
-            <div class="tile-row-2">
-                <?php if ($finishes && is_array($finishes)): ?>
-                    <?php foreach ($finishes as $finish):
-                        $f_name = $finish['finish_name'] ?? '';
-                        $f_code = $finish['product_code'] ?? '';
-                        $sizes = $finish['tile_size'] ?? [];
-                        $f_slip = $finishes_meta[$f_name] ?? '';
-                        ?>
-                        <div class="finish-block">
-                            <div class="finish-header">
-                                <div style="display: flex; align-items: center; gap: 25px;">
-                                    <div>
-                                        <span style="color:#24292e;">Finish:
-                                            <strong><?= htmlspecialchars($f_name) ?></strong></span>
-                                        <span style="color:#6a737d; font-size:12px; margin-left:10px;">(Code:
-                                            <?= htmlspecialchars($f_code) ?>)</span>
-                                    </div>
-                                    <div style="display: flex; align-items: center; gap: 5px;">
-                                        <span style="font-size: 13px; color: #586069; font-weight: 400; margin-right: 1px;">Slip
-                                            Rating:</span>
-                                        <input type="text" value="<?= htmlspecialchars($f_slip) ?>"
-                                            style="padding: 4px; border: 1px solid #d1d5da; border-radius: 3px; font-size: 13px; width: 120px;"
-                                            onblur="saveFinishMeta(<?= $tile->ID ?>, '<?= htmlspecialchars(addslashes($f_name)) ?>', this.value)"
-                                            placeholder="e.g. P5">
-                                        <div style="margin-left:15px; display:flex; align-items:center; gap:5px; font-size: 13px;">
-                                            <input type="checkbox" class="print-checkbox" data-post-id="<?= $tile->ID ?>" data-finish="<?= htmlspecialchars(addslashes($f_name)) ?>"> Add to Print
-                                            <input type="number" class="print-amount" value="1" min="1" max="18" style="width: 40px; display: none; padding: 4px; border: 1px solid #d1d5da; border-radius: 3px;">
+                <!-- Row 2 -->
+                <div class="tile-row-2">
+                    <?php if ($finishes && is_array($finishes)): ?>
+                        <?php foreach ($finishes as $finish):
+                            $f_name = $finish['finish_name'] ?? '';
+                            $f_code = $finish['product_code'] ?? '';
+                            $sizes = $finish['tile_size'] ?? [];
+                            $f_slip = $finishes_meta[$f_name] ?? '';
+                            ?>
+                            <div class="finish-block">
+                                <div class="finish-header">
+                                    <div style="display: flex; align-items: center; gap: 25px;">
+                                        <div>
+                                            <span style="color:#24292e;">Finish:
+                                                <strong><?= htmlspecialchars($f_name) ?></strong></span>
+                                            <span style="color:#6a737d; font-size:12px; margin-left:10px;">(Code:
+                                                <?= htmlspecialchars($f_code) ?>)</span>
                                         </div>
-                                    </div>
-                                </div>
-                                <div class="actions">
-                                    <a href="api.php?action=qrcode&post_id=<?= $tile->ID ?>&finish=<?= urlencode($f_name) ?>"
-                                        target="_blank" class="btn btn-qr">Generate QR Code</a>
-                                    <a href="api.php?action=pdf&post_id=<?= $tile->ID ?>&finish=<?= urlencode($f_name) ?>"
-                                        target="_blank" class="btn btn-pdf">Generate Print Card</a>
-                                </div>
-                            </div>
-                            <div class="finish-sizes">
-                                <?php if ($sizes && is_array($sizes)): ?>
-                                    <?php foreach ($sizes as $size):
-                                        $s_name = $size['tile_size_name'] ?? '';
-                                        $s_price = $prices[$f_name][$s_name] ?? '';
-                                        ?>
-                                        <div class="size-row price-row">
-                                            <div style="font-size:14px;"><?= htmlspecialchars($s_name) ?></div>
-                                            <div>
-                                                <input type="text" value="<?= htmlspecialchars($s_price) ?>"
-                                                    onblur="savePrice(<?= $tile->ID ?>, '<?= htmlspecialchars(addslashes($f_name)) ?>', '<?= htmlspecialchars(addslashes($s_name)) ?>', this.value)">
+                                        <div style="display: flex; align-items: center; gap: 5px;">
+                                            <span style="font-size: 13px; color: #586069; font-weight: 400; margin-right: 1px;">Slip
+                                                Rating:</span>
+                                            <input type="text" value="<?= htmlspecialchars($f_slip) ?>"
+                                                style="padding: 4px; border: 1px solid #d1d5da; border-radius: 3px; font-size: 13px; width: 120px;"
+                                                onblur="saveFinishMeta(<?= $tile->ID ?>, '<?= htmlspecialchars(addslashes($f_name)) ?>', this.value)"
+                                                placeholder="e.g. P5">
+                                            <div
+                                                style="margin-left:15px; display:flex; align-items:center; gap:5px; font-size: 13px;">
+                                                <input type="checkbox" class="print-checkbox" data-post-id="<?= $tile->ID ?>"
+                                                    data-finish="<?= htmlspecialchars(addslashes($f_name)) ?>"> Add to Print
+                                                <input type="number" class="print-amount" value="1" min="1" max="18"
+                                                    style="width: 40px; display: none; padding: 4px; border: 1px solid #d1d5da; border-radius: 3px;">
                                             </div>
                                         </div>
-                                    <?php endforeach; ?>
-                                <?php else: ?>
-                                    <div style="font-size:13px; color:#666;">No sizes found.</div>
-                                <?php endif; ?>
+                                    </div>
+                                    <div class="actions">
+                                        <a href="api.php?action=qrcode&post_id=<?= $tile->ID ?>&finish=<?= urlencode($f_name) ?>"
+                                            target="_blank" class="btn btn-qr">Generate QR Code</a>
+                                        <a href="api.php?action=pdf&post_id=<?= $tile->ID ?>&finish=<?= urlencode($f_name) ?>"
+                                            target="_blank" class="btn btn-pdf">Generate Print Card</a>
+                                    </div>
+                                </div>
+                                <div class="finish-sizes">
+                                    <?php if ($sizes && is_array($sizes)): ?>
+                                        <?php foreach ($sizes as $size):
+                                            $s_name = $size['tile_size_name'] ?? '';
+                                            $s_price = $prices[$f_name][$s_name] ?? '';
+                                            ?>
+                                            <div class="size-row price-row">
+                                                <div style="font-size:14px;"><?= htmlspecialchars($s_name) ?></div>
+                                                <div>
+                                                    <input type="text" value="<?= htmlspecialchars($s_price) ?>"
+                                                        onblur="savePrice(<?= $tile->ID ?>, '<?= htmlspecialchars(addslashes($f_name)) ?>', '<?= htmlspecialchars(addslashes($s_name)) ?>', this.value)">
+                                                </div>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    <?php else: ?>
+                                        <div style="font-size:13px; color:#666;">No sizes found.</div>
+                                    <?php endif; ?>
+                                </div>
                             </div>
-                        </div>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <div style="font-size:13px; color:#666;">No finishes configured for this tile.</div>
-                <?php endif; ?>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <div style="font-size:13px; color:#666;">No finishes configured for this tile.</div>
+                    <?php endif; ?>
+                </div>
             </div>
-        </div>
-    <?php endforeach; ?>
+        <?php endforeach; ?>
+    </div>
 
     <script>
         function showToast(msg) {
@@ -384,7 +397,7 @@ $tiles = get_posts($args);
             const checkboxes = document.querySelectorAll('.print-checkbox');
             const amounts = document.querySelectorAll('.print-amount');
             const btnPrintSheet = document.getElementById('btn_print_sheet');
-            
+
             function updatePrintSheet() {
                 let total = 0;
                 document.querySelectorAll('.print-checkbox:checked').forEach(cb => {
@@ -396,9 +409,9 @@ $tiles = get_posts($args);
                     }
                     total += val;
                 });
-                
+
                 btnPrintSheet.textContent = `Print Sheet (${total})`;
-                
+
                 // Disable unchecked if total >= 18
                 document.querySelectorAll('.print-checkbox').forEach(cb => {
                     if (!cb.checked) {
@@ -406,7 +419,7 @@ $tiles = get_posts($args);
                     }
                 });
             }
-            
+
             checkboxes.forEach(cb => {
                 cb.addEventListener('change', (e) => {
                     const block = e.target.closest('.finish-block');
@@ -421,7 +434,7 @@ $tiles = get_posts($args);
                     updatePrintSheet();
                 });
             });
-            
+
             amounts.forEach(amt => {
                 amt.addEventListener('input', () => {
                     let val = parseInt(amt.value);
@@ -441,12 +454,12 @@ $tiles = get_posts($args);
                     amount: amt
                 });
             });
-            
+
             if (data.length === 0) {
                 alert("Please add at least one card to print.");
                 return;
             }
-            
+
             document.getElementById('print_data_input').value = JSON.stringify(data);
             document.getElementById('print_sheet_form').submit();
         }
