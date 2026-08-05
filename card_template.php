@@ -39,11 +39,11 @@
         }
 
         .body-left {
-            width: 50%;
+            width: 55%;
         }
 
         .body-right {
-            width: 50%;
+            width: 45%;
             text-align: center;
         }
 
@@ -74,7 +74,7 @@
         }
 
         .extra-des {
-            font-size: 10px;
+            font-size: 9px;
         }
     </style>
 </head>
@@ -108,13 +108,13 @@
             </div>
 
             <div class="extra-des">
-                <?= htmlspecialchars($meta['qrcode_description']) ?>
+                <?= $meta['qrcode_description'] ?>
             </div>
         </td>
 
         <td class="body-right qr-box">
             <img class="qr-img" src="<?= $qr_image_data ?>">
-            <div class="qr-des">scan for price and more info</div>
+            <div class="qr-des">scan for price & details</div>
         </td>
     </table>
 </body>

@@ -46,12 +46,12 @@
         }
 
         .body-left {
-            width: 50%;
+            width: 55%;
             vertical-align: top;
         }
 
         .body-right {
-            width: 50%;
+            width: 45%;
             text-align: center;
             vertical-align: top;
         }
@@ -88,7 +88,7 @@
         }
 
         .extra-des {
-            font-size: 10px;
+            font-size: 9px;
         }
     </style>
 </head>
@@ -99,7 +99,7 @@
         $col = $index % 3;
         $row = floor($index / 3);
         $left = 1 + (66) * $col; // 63.5 + 2.5 = 66
-        $top = 8 + (46.6) * $row;
+        $top = 7 + (46.6) * $row;
         ?>
         <div class="card-container" style="left: <?= $left ?>mm; top: <?= $top ?>mm;">
             <div class="title-box">
@@ -125,13 +125,13 @@
                         </ul>
 
                         <div class="extra-des">
-                            <?= htmlspecialchars($item['description']) ?>
+                            <?= $item['description'] ?>
                         </div>
                     </td>
 
                     <td class="body-right qr-box">
                         <img class="qr-img" src="<?= $item['qr_base64'] ?>">
-                        <div class="qr-des">scan for price and more info</div>
+                        <div class="qr-des">scan for price & details</div>
                     </td>
                 </tr>
             </table>
