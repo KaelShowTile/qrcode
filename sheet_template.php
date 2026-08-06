@@ -99,7 +99,7 @@
         $col = $index % 3;
         $row = floor($index / 3);
         $left = 1 + (66) * $col; // 63.5 + 2.5 = 66
-        $top = 7 + (46.6) * $row;
+        $top = 5.5 + (46.6) * $row;
         ?>
         <div class="card-container" style="left: <?= $left ?>mm; top: <?= $top ?>mm;">
             <div class="title-box">

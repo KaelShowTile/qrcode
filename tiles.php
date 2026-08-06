@@ -8,7 +8,7 @@ if (!is_app_logged_in()) {
 
 // Fetch all tiles
 $args = array(
-    'post_type' => 'tile',
+    'post_type' => array('tile', 'private-tile'),
     'posts_per_page' => -1,
     'post_status' => 'publish'
 );
