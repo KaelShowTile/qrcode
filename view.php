@@ -9,7 +9,7 @@ if (!$post_id || !$finish_name) {
 }
 
 $tile = get_post($post_id);
-if (!$tile || $tile->post_type !== 'tile') {
+if (!$tile) {
     die("<div style='padding:20px; font-family:sans-serif; text-align:center;'>Tile not found.</div>");
 }
 
