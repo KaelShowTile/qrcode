@@ -92,7 +92,7 @@ if ($action === 'pdf') {
         die('Finish not found');
 
     $tile = get_post($post_id);
-    if (!$tile || $tile->post_type !== 'tile') {
+    if (!$tile || ($tile->post_type !== 'tile' && $tile->post_type !== 'private-tile')) {
         die('Invalid tile');
     }
 
@@ -104,7 +104,7 @@ if ($action === 'pdf') {
     $stmt = $pdo->prepare("SELECT * FROM tiles_meta WHERE post_id = ?");
     $stmt->execute([$post_id]);
     $meta = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['qrcode_description' => ''];
-    
+
     $slip_stmt = $pdo->prepare("SELECT slip_rating FROM tile_finishes_meta WHERE post_id = ? AND finish_name = ?");
     $slip_stmt->execute([$post_id, $finish_name]);
     $slip_row = $slip_stmt->fetch(PDO::FETCH_ASSOC);
@@ -173,19 +173,19 @@ if ($action === 'pdf') {
 if ($action === 'print_sheet') {
     $raw_data = isset($_POST['print_data']) ? stripslashes($_POST['print_data']) : '';
     $data = json_decode($raw_data, true);
-    
+
     if (!$data || !is_array($data)) {
         die("No print data received. Please try again.");
     }
-    
+
     global $pdo;
     $print_items = [];
     $total_cards = 0;
-    
+
     // Increase limits for intensive DOMPDF rendering
     ini_set('memory_limit', '512M');
     set_time_limit(120);
-    
+
     // QR generator setup
     $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
     $base_url = $protocol . "://" . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']);
@@ -201,15 +201,17 @@ if ($action === 'print_sheet') {
         $post_id = (int) $req['post_id'];
         $finish_name = $req['finish_name'] ?? '';
         $amount = (int) $req['amount'];
-        if ($amount < 1) $amount = 1;
-        
+        if ($amount < 1)
+            $amount = 1;
+
         $tile = get_post($post_id);
-        if (!$tile || $tile->post_type !== 'tile') continue;
-        
+        if (!$tile || ($tile->post_type !== 'tile' && $tile->post_type !== 'private-tile'))
+            continue;
+
         $material = function_exists('get_field') ? get_field('tile_material', $post_id) : '';
         $application = function_exists('get_field') ? get_field('tile_application', $post_id) : '';
         $finishes = function_exists('get_field') ? get_field('tile_finish', $post_id) : [];
-        
+
         // Find selected finish sizes
         $selected_sizes = [];
         if ($finishes && is_array($finishes)) {
@@ -224,24 +226,24 @@ if ($action === 'print_sheet') {
                 }
             }
         }
-        
+
         // Meta description
         $stmt = $pdo->prepare("SELECT * FROM tiles_meta WHERE post_id = ?");
         $stmt->execute([$post_id]);
         $meta = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['qrcode_description' => ''];
         $desc = $meta['qrcode_description'] ?? '';
-        
+
         // Slip rating
         $slip_stmt = $pdo->prepare("SELECT slip_rating FROM tile_finishes_meta WHERE post_id = ? AND finish_name = ?");
         $slip_stmt->execute([$post_id, $finish_name]);
         $slip_row = $slip_stmt->fetch(PDO::FETCH_ASSOC);
         $slip = $slip_row ? $slip_row['slip_rating'] : '';
-        
+
         // QR Code
         $url = $base_url . "/view.php?post_id=" . $post_id . "&finish=" . urlencode($finish_name);
         $qrcode = new QRCode($qr_options);
         $qr_image_data = $qrcode->render($url);
-        
+
         $item = [
             'title' => $tile->post_title,
             'material' => $material,
@@ -252,18 +254,19 @@ if ($action === 'print_sheet') {
             'description' => $desc,
             'qr_base64' => $qr_image_data
         ];
-        
+
         for ($i = 0; $i < $amount; $i++) {
-            if ($total_cards >= 18) break 2;
+            if ($total_cards >= 18)
+                break 2;
             $print_items[] = $item;
             $total_cards++;
         }
     }
-    
+
     if (empty($print_items)) {
         die("No items to print.");
     }
-    
+
     // Render HTML using sheet template
     ob_start();
     include __DIR__ . '/sheet_template.php';
@@ -288,7 +291,7 @@ if ($action === 'export_csv') {
     $output = fopen('php://output', 'w');
     fputcsv($output, ['tile_id', 'title', 'slip_rate', 'finish', 'size', 'price', 'description', 'product_code']);
 
-    $args = array('post_type' => 'tile', 'posts_per_page' => -1, 'post_status' => 'publish');
+    $args = array('post_type' => array('tile', 'private-tile'), 'posts_per_page' => -1, 'post_status' => 'publish');
     $tiles = get_posts($args);
 
     global $pdo;
@@ -309,7 +312,7 @@ if ($action === 'export_csv') {
                 $finish_name = $f['finish_name'] ?? '';
                 $product_code = $f['product_code'] ?? '';
                 $sizes = $f['tile_size'] ?? [];
-                
+
                 $slip_stmt = $pdo->prepare("SELECT slip_rating FROM tile_finishes_meta WHERE post_id = ? AND finish_name = ?");
                 $slip_stmt->execute([$post_id, $finish_name]);
                 $slip_row = $slip_stmt->fetch(PDO::FETCH_ASSOC);
@@ -403,7 +406,7 @@ if ($action === 'import_by_code') {
     }
 
     // 1. Build memory index
-    $args = array('post_type' => 'tile', 'posts_per_page' => -1, 'post_status' => 'publish');
+    $args = array('post_type' => array('tile', 'private-tile'), 'posts_per_page' => -1, 'post_status' => 'publish');
     $tiles = get_posts($args);
     $code_map = []; // 'product_code' => ['post_id' => X, 'finish_name' => Y]
 
@@ -431,7 +434,7 @@ if ($action === 'import_by_code') {
 
         $meta_insert_stmt = $pdo->prepare("INSERT INTO tiles_meta (post_id, qrcode_description) VALUES (?, ?)
                                            ON CONFLICT(post_id) DO UPDATE SET qrcode_description = excluded.qrcode_description");
-                                           
+
         $finish_meta_insert_stmt = $pdo->prepare("INSERT INTO tile_finishes_meta (post_id, finish_name, slip_rating) VALUES (?, ?, ?)
                                                   ON CONFLICT(post_id, finish_name) DO UPDATE SET slip_rating = excluded.slip_rating");
 
