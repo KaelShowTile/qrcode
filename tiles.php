@@ -176,6 +176,7 @@ $tiles = get_posts($args);
     <div class="header">
         <h2>QR Code & Print Card Generator</h2>
         <div style="display: flex; gap: 10px; align-items: center;">
+            <a href="logout.php" class="logout-btn">Logout</a>
             <a href="api.php?action=export_csv" class="action-btn"
                 style="background:#007bff; color:white; padding:6px 12px; text-decoration:none; border-radius:4px; font-size:14px;">Export
                 CSV</a>
@@ -195,10 +196,12 @@ $tiles = get_posts($args);
                 <input type="file" name="csv_code_file" id="csv_code_file" accept=".csv"
                     onchange="document.getElementById('import_code_form').submit();">
             </form>
-            <a href="logout.php" class="logout-btn">Logout</a>
             <button id="btn_print_sheet" class="action-btn"
                 style="background:#6f42c1; color:white; border:none; padding:6px 12px; border-radius:4px; font-size:14px; cursor:pointer;"
-                onclick="submitPrintSheet()">Print Sheet (0)</button>
+                onclick="submitPrintSheet(false)">Print Sheet (0)</button>
+            <button id="btn_print_sheet_no_price" class="action-btn"
+                style="background:#e83e8c; color:white; border:none; padding:6px 12px; border-radius:4px; font-size:14px; cursor:pointer;"
+                onclick="submitPrintSheet(true)">Print Sheet (No Price) (0)</button>
             <form id="print_sheet_form" action="api.php?action=print_sheet" method="POST" target="_blank"
                 style="display:none;">
                 <input type="hidden" name="print_data" id="print_data_input">
@@ -410,7 +413,8 @@ $tiles = get_posts($args);
                     total += val;
                 });
 
-                btnPrintSheet.textContent = `Print Sheet (${total})`;
+                document.getElementById('btn_print_sheet').textContent = `Print Sheet (${total})`;
+                document.getElementById('btn_print_sheet_no_price').textContent = `Print Sheet (No Price) (${total})`;
 
                 // Disable unchecked if total >= 18
                 document.querySelectorAll('.print-checkbox').forEach(cb => {
@@ -444,7 +448,7 @@ $tiles = get_posts($args);
             });
         });
 
-        function submitPrintSheet() {
+        function submitPrintSheet(no_price = false) {
             let data = [];
             document.querySelectorAll('.print-checkbox:checked').forEach(cb => {
                 const amt = parseInt(cb.nextElementSibling.value) || 1;
@@ -461,7 +465,13 @@ $tiles = get_posts($args);
             }
 
             document.getElementById('print_data_input').value = JSON.stringify(data);
-            document.getElementById('print_sheet_form').submit();
+            const form = document.getElementById('print_sheet_form');
+            if (no_price) {
+                form.action = "api.php?action=print_sheet&no_price=1";
+            } else {
+                form.action = "api.php?action=print_sheet";
+            }
+            form.submit();
         }
     </script>
 </body>
