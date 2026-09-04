@@ -25,7 +25,7 @@
         }
 
         .title-box {
-            margin-bottom: 5%;
+            margin-bottom: 0;
             height: 20%;
         }
 

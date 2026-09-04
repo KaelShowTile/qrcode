@@ -42,6 +42,11 @@ foreach ($prices_raw as $row) {
 
 $wp_url = get_permalink($post_id);
 
+$stmt_meta = $pdo->prepare("SELECT qrcode_description FROM tiles_meta WHERE post_id = ?");
+$stmt_meta->execute([$post_id]);
+$meta_row = $stmt_meta->fetch(PDO::FETCH_ASSOC);
+$qrcode_desc = $meta_row ? $meta_row['qrcode_description'] : '';
+
 // Try to get post thumbnail for a beautiful background or header
 $thumbnail_url = get_the_post_thumbnail_url($post_id, 'large');
 // Fallback background if no featured image
@@ -163,6 +168,17 @@ if (!$thumbnail_url) {
             padding: 20px 0;
         }
 
+        .qr-desc {
+            margin: 15px 0 20px 0;
+            padding: 5px 0;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 8px;
+            font-size: 13px;
+            color: #555;
+            line-height: 1.5;
+            text-align: left;
+        }
+
         .btn-visit {
             display: block;
             width: 100%;
@@ -210,6 +226,12 @@ if (!$thumbnail_url) {
                 <div class="empty-sizes"></div>
             <?php endif; ?>
         </div>
+
+        <?php if (!empty($qrcode_desc)): ?>
+            <div class="qr-desc">
+                <?= nl2br(htmlspecialchars($qrcode_desc)) ?>
+            </div>
+        <?php endif; ?>
 
         <a href="<?= $wp_url ?>?utm_source=showroom&utm_medium=qrcode&utm_campaign=showroom" class="btn-visit">View
             Collection</a>
