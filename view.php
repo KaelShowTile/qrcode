@@ -30,6 +30,7 @@ if (!$selected_finish) {
 
 $product_code = $selected_finish['product_code'] ?? '';
 $sizes = $selected_finish['tile_size'] ?? [];
+$virtual_threater_url = $selected_finish['visual_theatre'] ?? [];
 
 global $pdo;
 $stmt = $pdo->prepare("SELECT tile_size_name, price FROM tile_prices WHERE post_id = ? AND finish_name = ?");
@@ -49,6 +50,7 @@ $qrcode_desc = $meta_row ? $meta_row['qrcode_description'] : '';
 
 // Try to get post thumbnail for a beautiful background or header
 $thumbnail_url = get_the_post_thumbnail_url($post_id, 'large');
+
 // Fallback background if no featured image
 if (!$thumbnail_url) {
     $thumbnail_url = 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1000&auto=format&fit=crop';
@@ -229,12 +231,13 @@ if (!$thumbnail_url) {
 
         <?php if (!empty($qrcode_desc)): ?>
             <div class="qr-desc">
-                <?= nl2br(htmlspecialchars($qrcode_desc)) ?>
+                <?= $qrcode_desc ?>
             </div>
         <?php endif; ?>
-
-        <a href="<?= $wp_url ?>?utm_source=showroom&utm_medium=qrcode&utm_campaign=showroom" class="btn-visit">View
-            Collection</a>
+        <?php if(!empty($virtual_threater_url)): ?>
+            <a href="<?= $virtual_threater_url ?>" class="btn-visit" style="margin-bottom: 10px;">Virtual Threater</a>
+        <?php endif; ?>
+        <a href="<?= $wp_url ?>?utm_source=showroom&utm_medium=qrcode&utm_campaign=showroom" class="btn-visit">View Collection</a>
     </div>
 
 </body>
