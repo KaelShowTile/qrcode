@@ -176,6 +176,9 @@ $tiles = get_posts($args);
     <div class="header">
         <h2>QR Code & Print Card Generator</h2>
         <div style="display: flex; gap: 10px; align-items: center;">
+            <button id="btn_print_sheet_no_price" class="action-btn"
+                style="background:#e83e8c; color:white; border:none; padding:6px 12px; border-radius:4px; font-size:14px; cursor:pointer;"
+                onclick="submitPrintSheet(true)">Print Sheet (No Price) (0)</button>
             <a href="logout.php" class="logout-btn">Logout</a>
             <a href="api.php?action=export_csv" class="action-btn"
                 style="background:#007bff; color:white; padding:6px 12px; text-decoration:none; border-radius:4px; font-size:14px;">Export
@@ -198,10 +201,7 @@ $tiles = get_posts($args);
             </form>
             <button id="btn_print_sheet" class="action-btn"
                 style="background:#6f42c1; color:white; border:none; padding:6px 12px; border-radius:4px; font-size:14px; cursor:pointer;"
-                onclick="submitPrintSheet(false)">Print Sheet (0)</button>
-            <button id="btn_print_sheet_no_price" class="action-btn"
-                style="background:#e83e8c; color:white; border:none; padding:6px 12px; border-radius:4px; font-size:14px; cursor:pointer;"
-                onclick="submitPrintSheet(true)">Print Sheet (No Price) (0)</button>
+                onclick="submitPrintSheet(false)">Print Sheet (0)</button>           
             <form id="print_sheet_form" action="api.php?action=print_sheet" method="POST" target="_blank"
                 style="display:none;">
                 <input type="hidden" name="print_data" id="print_data_input">
