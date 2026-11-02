@@ -242,7 +242,7 @@ if ($action === 'print_sheet') {
         // QR Code
         $is_no_price = isset($_GET['no_price']) && $_GET['no_price'] == '1';
         if ($is_no_price) {
-            $url = get_permalink($post_id) . '?utm_source=showroom&utm_medium=qrcode&utm_campaign=supplier';
+            $url = get_permalink($post_id) . '?_source=showroom&utm_medium=qrcode&utm_campaign=supplier';
         } else {
             $url = $base_url . "/view.php?post_id=" . $post_id . "&finish=" . urlencode($finish_name);
         }

@@ -235,7 +235,7 @@ if (!$thumbnail_url) {
             </div>
         <?php endif; ?>
         <?php if(!empty($virtual_threater_url)): ?>
-            <a href="<?= $virtual_threater_url ?>" class="btn-visit" style="margin-bottom: 10px;">Virtual Threater</a>
+            <a href="<?= $virtual_threater_url ?>" class="btn-visit" style="margin-bottom: 10px;">Virtual Theatre</a>
         <?php endif; ?>
         <a href="<?= $wp_url ?>?utm_source=showroom&utm_medium=qrcode&utm_campaign=showroom" class="btn-visit">View Collection</a>
     </div>
