@@ -225,20 +225,37 @@ $tiles = get_posts($args);
             $stmt->execute([$tile->ID]);
             $meta = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['slip_rating' => '', 'qrcode_description' => ''];
 
-            $stmt = $pdo->prepare("SELECT finish_name, tile_size_name, price FROM tile_prices WHERE post_id = ?");
+            $stmt = $pdo->prepare("SELECT product_code, finish_name, tile_size_name, price FROM tile_prices WHERE post_id = ?");
             $stmt->execute([$tile->ID]);
             $prices_raw = $stmt->fetchAll(PDO::FETCH_ASSOC);
             $prices = [];
+            $prices_by_finish = [];
             foreach ($prices_raw as $row) {
-                $prices[$row['finish_name']][$row['tile_size_name']] = $row['price'];
+                $p_code = $row['product_code'] ?? '';
+                $p_fname = $row['finish_name'] ?? '';
+                $p_sname = $row['tile_size_name'] ?? '';
+                $p_val = $row['price'] ?? '';
+                if (trim((string) $p_code) !== '') {
+                    $prices[$p_code][$p_sname] = $p_val;
+                } else {
+                    $prices_by_finish[$p_fname][$p_sname] = $p_val;
+                }
             }
 
-            $stmt = $pdo->prepare("SELECT finish_name, slip_rating FROM tile_finishes_meta WHERE post_id = ?");
+            $stmt = $pdo->prepare("SELECT product_code, finish_name, slip_rating FROM tile_finishes_meta WHERE post_id = ?");
             $stmt->execute([$tile->ID]);
             $finishes_meta_raw = $stmt->fetchAll(PDO::FETCH_ASSOC);
             $finishes_meta = [];
+            $finishes_meta_by_finish = [];
             foreach ($finishes_meta_raw as $row) {
-                $finishes_meta[$row['finish_name']] = $row['slip_rating'];
+                $m_code = $row['product_code'] ?? '';
+                $m_fname = $row['finish_name'] ?? '';
+                $m_slip = $row['slip_rating'] ?? '';
+                if (trim((string) $m_code) !== '') {
+                    $finishes_meta[$m_code] = $m_slip;
+                } else {
+                    $finishes_meta_by_finish[$m_fname] = $m_slip;
+                }
             }
             ?>
             <div class="tile-card" data-post-id="<?= $tile->ID ?>">
@@ -280,8 +297,9 @@ $tiles = get_posts($args);
                         <?php foreach ($finishes as $finish):
                             $f_name = $finish['finish_name'] ?? '';
                             $f_code = $finish['product_code'] ?? '';
+                            $has_code = trim((string) $f_code) !== '';
                             $sizes = $finish['tile_size'] ?? [];
-                            $f_slip = $finishes_meta[$f_name] ?? '';
+                            $f_slip = $has_code ? ($finishes_meta[$f_code] ?? '') : ($finishes_meta_by_finish[$f_name] ?? '');
                             ?>
                             <div class="finish-block">
                                 <div class="finish-header">
@@ -290,42 +308,45 @@ $tiles = get_posts($args);
                                             <span style="color:#24292e;">Finish:
                                                 <strong><?= htmlspecialchars($f_name) ?></strong></span>
                                             <span style="color:#6a737d; font-size:12px; margin-left:10px;">(Code:
-                                                <?= htmlspecialchars($f_code) ?>)</span>
+                                                <?= htmlspecialchars($f_code ?: '-') ?>)</span>
                                         </div>
                                         <div style="display: flex; align-items: center; gap: 5px;">
                                             <span style="font-size: 13px; color: #586069; font-weight: 400; margin-right: 1px;">Slip
                                                 Rating:</span>
                                             <input type="text" value="<?= htmlspecialchars($f_slip) ?>"
                                                 style="padding: 4px; border: 1px solid #d1d5da; border-radius: 3px; font-size: 13px; width: 120px;"
-                                                onblur="saveFinishMeta(<?= $tile->ID ?>, '<?= htmlspecialchars(addslashes($f_name)) ?>', this.value)"
+                                                onblur='saveFinishMeta(<?= $tile->ID ?>, <?= htmlspecialchars(json_encode($f_code), ENT_QUOTES) ?>, <?= htmlspecialchars(json_encode($f_name), ENT_QUOTES) ?>, this.value)'
                                                 placeholder="e.g. P5">
                                             <div
                                                 style="margin-left:15px; display:flex; align-items:center; gap:5px; font-size: 13px;">
                                                 <input type="checkbox" class="print-checkbox" data-post-id="<?= $tile->ID ?>"
-                                                    data-finish="<?= htmlspecialchars(addslashes($f_name)) ?>"> Add to Print
+                                                    data-code="<?= htmlspecialchars($f_code) ?>"
+                                                    data-finish="<?= htmlspecialchars($f_name) ?>"> Add to Print
                                                 <input type="number" class="print-amount" value="1" min="1" max="18"
                                                     style="width: 40px; display: none; padding: 4px; border: 1px solid #d1d5da; border-radius: 3px;">
                                             </div>
                                         </div>
                                     </div>
                                     <div class="actions">
-                                        <a href="api.php?action=qrcode&post_id=<?= $tile->ID ?>&finish=<?= urlencode($f_name) ?>"
-                                            target="_blank" class="btn btn-qr">Generate QR Code</a>
-                                        <a href="api.php?action=pdf&post_id=<?= $tile->ID ?>&finish=<?= urlencode($f_name) ?>"
-                                            target="_blank" class="btn btn-pdf">Generate Print Card</a>
+                                        <a href="api.php?action=qrcode&post_id=<?= $tile->ID ?>&code=<?= urlencode($f_code) ?>"
+                                            target="_blank" class="btn btn-qr"
+                                            onclick='return validateProductCode(<?= htmlspecialchars(json_encode($f_code), ENT_QUOTES) ?>)'>Generate QR Code</a>
+                                        <a href="api.php?action=pdf&post_id=<?= $tile->ID ?>&code=<?= urlencode($f_code) ?>"
+                                            target="_blank" class="btn btn-pdf"
+                                            onclick='return validateProductCode(<?= htmlspecialchars(json_encode($f_code), ENT_QUOTES) ?>)'>Generate Print Card</a>
                                     </div>
                                 </div>
                                 <div class="finish-sizes">
                                     <?php if ($sizes && is_array($sizes)): ?>
                                         <?php foreach ($sizes as $size):
                                             $s_name = $size['tile_size_name'] ?? '';
-                                            $s_price = $prices[$f_name][$s_name] ?? '';
+                                            $s_price = $has_code ? ($prices[$f_code][$s_name] ?? '') : ($prices_by_finish[$f_name][$s_name] ?? '');
                                             ?>
                                             <div class="size-row price-row">
                                                 <div style="font-size:14px;"><?= htmlspecialchars($s_name) ?></div>
                                                 <div>
                                                     <input type="text" value="<?= htmlspecialchars($s_price) ?>"
-                                                        onblur="savePrice(<?= $tile->ID ?>, '<?= htmlspecialchars(addslashes($f_name)) ?>', '<?= htmlspecialchars(addslashes($s_name)) ?>', this.value)">
+                                                        onblur='savePrice(<?= $tile->ID ?>, <?= htmlspecialchars(json_encode($f_code), ENT_QUOTES) ?>, <?= htmlspecialchars(json_encode($f_name), ENT_QUOTES) ?>, <?= htmlspecialchars(json_encode($s_name), ENT_QUOTES) ?>, this.value)'>
                                                 </div>
                                             </div>
                                         <?php endforeach; ?>
@@ -370,11 +391,19 @@ $tiles = get_posts($args);
                 });
         }
 
-        function savePrice(postId, finishName, sizeName, price) {
+        function validateProductCode(code) {
+            if (!code || String(code).trim() === '') {
+                alert('Product Code is empty for this finish. Please fill in Product Code in WordPress before generating.');
+                return false;
+            }
+            return true;
+        }
+
+        function savePrice(postId, productCode, finishName, sizeName, price) {
             fetch('api.php?action=save_price', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `post_id=${postId}&finish_name=${encodeURIComponent(finishName)}&size_name=${encodeURIComponent(sizeName)}&price=${encodeURIComponent(price)}`
+                body: `post_id=${postId}&product_code=${encodeURIComponent(productCode)}&finish_name=${encodeURIComponent(finishName)}&size_name=${encodeURIComponent(sizeName)}&price=${encodeURIComponent(price)}`
             })
                 .then(r => r.json())
                 .then(data => {
@@ -383,11 +412,11 @@ $tiles = get_posts($args);
                 });
         }
 
-        function saveFinishMeta(postId, finishName, slipRating) {
+        function saveFinishMeta(postId, productCode, finishName, slipRating) {
             fetch('api.php?action=save_finish_meta', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `post_id=${postId}&finish_name=${encodeURIComponent(finishName)}&slip_rating=${encodeURIComponent(slipRating)}`
+                body: `post_id=${postId}&product_code=${encodeURIComponent(productCode)}&finish_name=${encodeURIComponent(finishName)}&slip_rating=${encodeURIComponent(slipRating)}`
             })
                 .then(r => r.json())
                 .then(data => {
@@ -426,6 +455,11 @@ $tiles = get_posts($args);
 
             checkboxes.forEach(cb => {
                 cb.addEventListener('change', (e) => {
+                    const code = e.target.getAttribute('data-code') || '';
+                    if (e.target.checked && !validateProductCode(code)) {
+                        e.target.checked = false;
+                        return;
+                    }
                     const block = e.target.closest('.finish-block');
                     const amtInput = e.target.nextElementSibling;
                     if (e.target.checked) {
@@ -450,14 +484,25 @@ $tiles = get_posts($args);
 
         function submitPrintSheet(no_price = false) {
             let data = [];
+            let missingCode = false;
             document.querySelectorAll('.print-checkbox:checked').forEach(cb => {
+                const code = cb.getAttribute('data-code') || '';
+                if (!validateProductCode(code)) {
+                    missingCode = true;
+                    return;
+                }
                 const amt = parseInt(cb.nextElementSibling.value) || 1;
                 data.push({
                     post_id: cb.getAttribute('data-post-id'),
+                    code: code,
                     finish_name: cb.getAttribute('data-finish'),
                     amount: amt
                 });
             });
+
+            if (missingCode) {
+                return;
+            }
 
             if (data.length === 0) {
                 alert("Please add at least one card to print.");

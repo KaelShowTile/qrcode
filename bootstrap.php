@@ -24,6 +24,9 @@ if (!file_exists($config_file)) {
             if (!defined('ABSPATH')) {
                 require_once $wp_load;
             }
+            if (function_exists('migrate_sqlite_to_product_code')) {
+                migrate_sqlite_to_product_code($pdo, $db_file);
+            }
         }
     }
 }

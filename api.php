@@ -16,6 +16,30 @@ error_reporting(E_ALL);
 
 $action = $_GET['action'] ?? '';
 
+/**
+ * Find the matching finish entry in a tile's ACF tile_finish array by product_code.
+ */
+function find_tile_finish_by_code($finishes, string $code): ?array {
+    if (!$finishes || !is_array($finishes) || trim($code) === '') {
+        return null;
+    }
+    foreach ($finishes as $f) {
+        if (($f['product_code'] ?? '') === $code) {
+            return $f;
+        }
+    }
+    return null;
+}
+
+/**
+ * Build the QR code target URL using post_id and product_code.
+ */
+function build_tile_qr_url(int $post_id, string $code): string {
+    $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
+    $base_url = $protocol . "://" . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']);
+    return $base_url . "/view.php?post_id=" . $post_id . "&code=" . urlencode($code);
+}
+
 if ($action === 'save_meta') {
     $post_id = (int) $_POST['post_id'];
     $qrcode_description = $_POST['qrcode_description'] ?? '';
@@ -32,13 +56,14 @@ if ($action === 'save_meta') {
 
 if ($action === 'save_finish_meta') {
     $post_id = (int) $_POST['post_id'];
+    $product_code = $_POST['product_code'] ?? '';
     $finish_name = $_POST['finish_name'] ?? '';
     $slip_rating = $_POST['slip_rating'] ?? '';
 
     global $pdo;
-    $stmt = $pdo->prepare("INSERT INTO tile_finishes_meta (post_id, finish_name, slip_rating) VALUES (?, ?, ?)
-                           ON CONFLICT(post_id, finish_name) DO UPDATE SET slip_rating = excluded.slip_rating");
-    $stmt->execute([$post_id, $finish_name, $slip_rating]);
+    $stmt = $pdo->prepare("INSERT INTO tile_finishes_meta (post_id, product_code, finish_name, slip_rating) VALUES (?, ?, ?, ?)
+                           ON CONFLICT(post_id, product_code) DO UPDATE SET slip_rating = excluded.slip_rating, finish_name = excluded.finish_name");
+    $stmt->execute([$post_id, $product_code, $finish_name, $slip_rating]);
 
     echo json_encode(['success' => true]);
     exit;
@@ -46,29 +71,44 @@ if ($action === 'save_finish_meta') {
 
 if ($action === 'save_price') {
     $post_id = (int) $_POST['post_id'];
+    $product_code = $_POST['product_code'] ?? '';
     $finish_name = $_POST['finish_name'] ?? '';
     $size_name = $_POST['size_name'] ?? '';
     $price = $_POST['price'] ?? '';
 
     global $pdo;
-    $stmt = $pdo->prepare("INSERT INTO tile_prices (post_id, finish_name, tile_size_name, price) VALUES (?, ?, ?, ?)
-                           ON CONFLICT(post_id, finish_name, tile_size_name) DO UPDATE SET price = excluded.price");
-    $stmt->execute([$post_id, $finish_name, $size_name, $price]);
+    $stmt = $pdo->prepare("INSERT INTO tile_prices (post_id, product_code, finish_name, tile_size_name, price) VALUES (?, ?, ?, ?, ?)
+                           ON CONFLICT(post_id, product_code, tile_size_name) DO UPDATE SET price = excluded.price, finish_name = excluded.finish_name");
+    $stmt->execute([$post_id, $product_code, $finish_name, $size_name, $price]);
 
     echo json_encode(['success' => true]);
     exit;
 }
 
 if ($action === 'qrcode') {
-    $post_id = (int) $_GET['post_id'];
-    $finish_name = $_GET['finish'] ?? '';
+    $post_id = (int) ($_GET['post_id'] ?? 0);
+    $code = $_GET['code'] ?? '';
 
-    $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
-    $base_url = $protocol . "://" . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']);
-    $url = $base_url . "/view.php?post_id=" . $post_id . "&finish=" . urlencode($finish_name);
+    if (!$post_id || trim($code) === '') {
+        http_response_code(400);
+        die('Product Code is empty or missing.');
+    }
+
+    $tile = get_post($post_id);
+    if (!$tile || ($tile->post_type !== 'tile' && $tile->post_type !== 'private-tile')) {
+        die('Invalid tile');
+    }
+
+    $finishes = function_exists('get_field') ? get_field('tile_finish', $post_id) : [];
+    $selected_finish = find_tile_finish_by_code($finishes, $code);
+    if (!$selected_finish) {
+        die('Finish not found');
+    }
+
+    $url = build_tile_qr_url($post_id, $code);
 
     $options = new QROptions([
-        'version' => 5,
+        'version' => \chillerlan\QRCode\Common\Version::AUTO,
         'outputInterface' => \chillerlan\QRCode\Output\QRGdImagePNG::class,
         'eccLevel' => \chillerlan\QRCode\Common\EccLevel::L,
         'scale' => 5,
@@ -86,10 +126,11 @@ if ($action === 'qrcode') {
 }
 
 if ($action === 'pdf') {
-    $post_id = (int) $_GET['post_id'];
-    $finish_name = $_GET['finish'] ?? '';
-    if (!$finish_name)
-        die('Finish not found');
+    $post_id = (int) ($_GET['post_id'] ?? 0);
+    $code = $_GET['code'] ?? '';
+    if (!$post_id || trim($code) === '') {
+        die('Product Code is empty or missing.');
+    }
 
     $tile = get_post($post_id);
     if (!$tile || ($tile->post_type !== 'tile' && $tile->post_type !== 'private-tile')) {
@@ -100,42 +141,32 @@ if ($action === 'pdf') {
     $application = function_exists('get_field') ? get_field('tile_application', $post_id) : '';
     $finishes = function_exists('get_field') ? get_field('tile_finish', $post_id) : [];
 
+    $selected_finish = find_tile_finish_by_code($finishes, $code);
+    if (!$selected_finish) {
+        die('Finish not found');
+    }
+    $finish_name = $selected_finish['finish_name'] ?? '';
+
     global $pdo;
     $stmt = $pdo->prepare("SELECT * FROM tiles_meta WHERE post_id = ?");
     $stmt->execute([$post_id]);
     $meta = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['qrcode_description' => ''];
 
-    $slip_stmt = $pdo->prepare("SELECT slip_rating FROM tile_finishes_meta WHERE post_id = ? AND finish_name = ?");
-    $slip_stmt->execute([$post_id, $finish_name]);
+    $slip_stmt = $pdo->prepare("SELECT slip_rating FROM tile_finishes_meta WHERE post_id = ? AND product_code = ?");
+    $slip_stmt->execute([$post_id, $code]);
     $slip_row = $slip_stmt->fetch(PDO::FETCH_ASSOC);
     $meta['slip_rating'] = $slip_row ? $slip_row['slip_rating'] : '';
 
-    $stmt = $pdo->prepare("SELECT tile_size_name, price FROM tile_prices WHERE post_id = ? AND finish_name = ?");
-    $stmt->execute([$post_id, $finish_name]);
+    $stmt = $pdo->prepare("SELECT tile_size_name, price FROM tile_prices WHERE post_id = ? AND product_code = ?");
+    $stmt->execute([$post_id, $code]);
     $prices_raw = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $prices = [];
     foreach ($prices_raw as $row) {
         $prices[$row['tile_size_name']] = $row['price'];
     }
 
-    $selected_finish = null;
-    if ($finishes && is_array($finishes)) {
-        foreach ($finishes as $f) {
-            if (($f['finish_name'] ?? '') === $finish_name) {
-                $selected_finish = $f;
-                break;
-            }
-        }
-    }
-
-    if (!$selected_finish) {
-        die('Finish not found');
-    }
-
     // Generate QR Code base64
-    $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
-    $base_url = $protocol . "://" . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']);
-    $url = $base_url . "/view.php?post_id=" . $post_id . "&finish=" . urlencode($finish_name);
+    $url = build_tile_qr_url($post_id, $code);
     $qr_options = new QROptions([
         'version' => \chillerlan\QRCode\Common\Version::AUTO,
         'outputInterface' => \chillerlan\QRCode\Output\QRGdImagePNG::class,
@@ -165,7 +196,7 @@ if ($action === 'pdf') {
 
     $dompdf->render();
 
-    $filename = 'tile_card_' . $post_id . '_' . sanitize_title($finish_name) . '.pdf';
+    $filename = 'tile_card_' . $post_id . '_' . sanitize_title($finish_name . '-' . $code) . '.pdf';
     $dompdf->stream($filename, array("Attachment" => false)); // Inline view
     exit;
 }
@@ -187,8 +218,6 @@ if ($action === 'print_sheet') {
     set_time_limit(120);
 
     // QR generator setup
-    $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
-    $base_url = $protocol . "://" . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']);
     $qr_options = new QROptions([
         'version' => \chillerlan\QRCode\Common\Version::AUTO,
         'outputInterface' => \chillerlan\QRCode\Output\QRGdImagePNG::class,
@@ -198,9 +227,12 @@ if ($action === 'print_sheet') {
     ]);
 
     foreach ($data as $req) {
-        $post_id = (int) $req['post_id'];
-        $finish_name = $req['finish_name'] ?? '';
-        $amount = (int) $req['amount'];
+        $post_id = (int) ($req['post_id'] ?? 0);
+        $code = $req['code'] ?? '';
+        if (trim($code) === '') {
+            die("Product Code is empty or missing for a selected item.");
+        }
+        $amount = (int) ($req['amount'] ?? 1);
         if ($amount < 1)
             $amount = 1;
 
@@ -212,18 +244,17 @@ if ($action === 'print_sheet') {
         $application = function_exists('get_field') ? get_field('tile_application', $post_id) : '';
         $finishes = function_exists('get_field') ? get_field('tile_finish', $post_id) : [];
 
+        $selected_finish = find_tile_finish_by_code($finishes, $code);
+        if (!$selected_finish) {
+            continue;
+        }
+        $finish_name = $selected_finish['finish_name'] ?? '';
+
         // Find selected finish sizes
         $selected_sizes = [];
-        if ($finishes && is_array($finishes)) {
-            foreach ($finishes as $f) {
-                if (($f['finish_name'] ?? '') === $finish_name) {
-                    if (isset($f['tile_size']) && is_array($f['tile_size'])) {
-                        foreach ($f['tile_size'] as $s) {
-                            $selected_sizes[] = $s['tile_size_name'] ?? '-';
-                        }
-                    }
-                    break;
-                }
+        if (isset($selected_finish['tile_size']) && is_array($selected_finish['tile_size'])) {
+            foreach ($selected_finish['tile_size'] as $s) {
+                $selected_sizes[] = $s['tile_size_name'] ?? '-';
             }
         }
 
@@ -234,8 +265,8 @@ if ($action === 'print_sheet') {
         $desc = $meta['qrcode_description'] ?? '';
 
         // Slip rating
-        $slip_stmt = $pdo->prepare("SELECT slip_rating FROM tile_finishes_meta WHERE post_id = ? AND finish_name = ?");
-        $slip_stmt->execute([$post_id, $finish_name]);
+        $slip_stmt = $pdo->prepare("SELECT slip_rating FROM tile_finishes_meta WHERE post_id = ? AND product_code = ?");
+        $slip_stmt->execute([$post_id, $code]);
         $slip_row = $slip_stmt->fetch(PDO::FETCH_ASSOC);
         $slip = $slip_row ? $slip_row['slip_rating'] : '';
 
@@ -244,7 +275,7 @@ if ($action === 'print_sheet') {
         if ($is_no_price) {
             $url = get_permalink($post_id) . '?_source=showroom&utm_medium=qrcode&utm_campaign=supplier';
         } else {
-            $url = $base_url . "/view.php?post_id=" . $post_id . "&finish=" . urlencode($finish_name);
+            $url = build_tile_qr_url($post_id, $code);
         }
         $qrcode = new QRCode($qr_options);
         $qr_image_data = $qrcode->render($url);
@@ -300,15 +331,18 @@ if ($action === 'export_csv') {
     $tiles = get_posts($args);
 
     global $pdo;
+    $meta_stmt = $pdo->prepare("SELECT * FROM tiles_meta WHERE post_id = ?");
+    $slip_by_code_stmt = $pdo->prepare("SELECT slip_rating FROM tile_finishes_meta WHERE post_id = ? AND product_code = ?");
+    $slip_by_finish_stmt = $pdo->prepare("SELECT slip_rating FROM tile_finishes_meta WHERE post_id = ? AND product_code = '' AND finish_name = ?");
+    $price_by_code_stmt = $pdo->prepare("SELECT price FROM tile_prices WHERE post_id = ? AND product_code = ? AND tile_size_name = ?");
+    $price_by_finish_stmt = $pdo->prepare("SELECT price FROM tile_prices WHERE post_id = ? AND product_code = '' AND finish_name = ? AND tile_size_name = ?");
 
     foreach ($tiles as $tile) {
         $post_id = $tile->ID;
         $title = $tile->post_title;
 
-        $stmt = $pdo->prepare("SELECT * FROM tiles_meta WHERE post_id = ?");
-        $stmt->execute([$post_id]);
-        $meta = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['qrcode_description' => ''];
-        $description = $meta['qrcode_description'] ?? '';
+        $meta_stmt->execute([$post_id]);
+        $meta = $meta_stmt->fetch(PDO::FETCH_ASSOC) ?: ['qrcode_description' => ''];
         $description = $meta['qrcode_description'] ?? '';
 
         $finishes = function_exists('get_field') ? get_field('tile_finish', $post_id) : [];
@@ -316,20 +350,29 @@ if ($action === 'export_csv') {
             foreach ($finishes as $f) {
                 $finish_name = $f['finish_name'] ?? '';
                 $product_code = $f['product_code'] ?? '';
+                $has_code = trim((string) $product_code) !== '';
                 $sizes = $f['tile_size'] ?? [];
 
-                $slip_stmt = $pdo->prepare("SELECT slip_rating FROM tile_finishes_meta WHERE post_id = ? AND finish_name = ?");
-                $slip_stmt->execute([$post_id, $finish_name]);
-                $slip_row = $slip_stmt->fetch(PDO::FETCH_ASSOC);
+                if ($has_code) {
+                    $slip_by_code_stmt->execute([$post_id, $product_code]);
+                    $slip_row = $slip_by_code_stmt->fetch(PDO::FETCH_ASSOC);
+                } else {
+                    $slip_by_finish_stmt->execute([$post_id, $finish_name]);
+                    $slip_row = $slip_by_finish_stmt->fetch(PDO::FETCH_ASSOC);
+                }
                 $slip_rate = $slip_row ? $slip_row['slip_rating'] : '';
 
                 if ($sizes && is_array($sizes)) {
                     foreach ($sizes as $s) {
                         $size_name = $s['tile_size_name'] ?? '';
 
-                        $stmt2 = $pdo->prepare("SELECT price FROM tile_prices WHERE post_id = ? AND finish_name = ? AND tile_size_name = ?");
-                        $stmt2->execute([$post_id, $finish_name, $size_name]);
-                        $price_row = $stmt2->fetch(PDO::FETCH_ASSOC);
+                        if ($has_code) {
+                            $price_by_code_stmt->execute([$post_id, $product_code, $size_name]);
+                            $price_row = $price_by_code_stmt->fetch(PDO::FETCH_ASSOC);
+                        } else {
+                            $price_by_finish_stmt->execute([$post_id, $finish_name, $size_name]);
+                            $price_row = $price_by_finish_stmt->fetch(PDO::FETCH_ASSOC);
+                        }
                         $price = $price_row ? $price_row['price'] : '';
 
                         fputcsv($output, [$post_id, $title, $slip_rate, $finish_name, $size_name, $price, $description, $product_code]);
@@ -354,14 +397,15 @@ if ($action === 'import_csv') {
     }
 
     global $pdo;
+    $wp_finishes_cache = [];
     $pdo->beginTransaction();
     try {
         $meta_stmt = $pdo->prepare("INSERT INTO tiles_meta (post_id, qrcode_description) VALUES (?, ?) 
                                     ON CONFLICT(post_id) DO UPDATE SET qrcode_description = excluded.qrcode_description");
-        $finish_meta_stmt = $pdo->prepare("INSERT INTO tile_finishes_meta (post_id, finish_name, slip_rating) VALUES (?, ?, ?)
-                                           ON CONFLICT(post_id, finish_name) DO UPDATE SET slip_rating = excluded.slip_rating");
-        $price_stmt = $pdo->prepare("INSERT INTO tile_prices (post_id, finish_name, tile_size_name, price) VALUES (?, ?, ?, ?)
-                                     ON CONFLICT(post_id, finish_name, tile_size_name) DO UPDATE SET price = excluded.price");
+        $finish_meta_stmt = $pdo->prepare("INSERT INTO tile_finishes_meta (post_id, product_code, finish_name, slip_rating) VALUES (?, ?, ?, ?)
+                                           ON CONFLICT(post_id, product_code) DO UPDATE SET slip_rating = excluded.slip_rating, finish_name = excluded.finish_name");
+        $price_stmt = $pdo->prepare("INSERT INTO tile_prices (post_id, product_code, finish_name, tile_size_name, price) VALUES (?, ?, ?, ?, ?)
+                                     ON CONFLICT(post_id, product_code, tile_size_name) DO UPDATE SET price = excluded.price, finish_name = excluded.finish_name");
 
         while (($row = fgetcsv($file)) !== false) {
             if (count($row) < 7)
@@ -376,15 +420,33 @@ if ($action === 'import_csv') {
             $size_name = $row[4];
             $price = $row[5];
             $description = $row[6];
+            $product_code = $row[7] ?? '';
 
             // Update tiles_meta (qrcode_description only)
             $meta_stmt->execute([$post_id, $description]);
 
-            // Update tile_finishes_meta
-            $finish_meta_stmt->execute([$post_id, $finish_name, $slip_rate]);
+            $target_codes = [];
+            if (trim((string) $product_code) !== '') {
+                $target_codes[] = $product_code;
+            } else {
+                // Fallback if CSV row has empty product_code: match WordPress finishes by finish_name
+                if (!isset($wp_finishes_cache[$post_id])) {
+                    $wp_finishes_cache[$post_id] = function_exists('get_field') ? (get_field('tile_finish', $post_id) ?: []) : [];
+                }
+                foreach ($wp_finishes_cache[$post_id] as $f) {
+                    if (($f['finish_name'] ?? '') === $finish_name && trim((string) ($f['product_code'] ?? '')) !== '') {
+                        $target_codes[] = $f['product_code'];
+                    }
+                }
+                if (empty($target_codes)) {
+                    $target_codes[] = '';
+                }
+            }
 
-            // Update tile_prices
-            $price_stmt->execute([$post_id, $finish_name, $size_name, $price]);
+            foreach ($target_codes as $code) {
+                $finish_meta_stmt->execute([$post_id, $code, $finish_name, $slip_rate]);
+                $price_stmt->execute([$post_id, $code, $finish_name, $size_name, $price]);
+            }
         }
         $pdo->commit();
     } catch (Exception $e) {
@@ -421,7 +483,7 @@ if ($action === 'import_by_code') {
             foreach ($finishes as $f) {
                 $code = $f['product_code'] ?? '';
                 $fname = $f['finish_name'] ?? '';
-                if ($code) {
+                if (trim((string) $code) !== '') {
                     $code_map[$code] = [
                         'post_id' => $tile->ID,
                         'finish_name' => $fname
@@ -434,14 +496,14 @@ if ($action === 'import_by_code') {
     global $pdo;
     $pdo->beginTransaction();
     try {
-        $price_stmt = $pdo->prepare("INSERT INTO tile_prices (post_id, finish_name, tile_size_name, price) VALUES (?, ?, ?, ?)
-                                     ON CONFLICT(post_id, finish_name, tile_size_name) DO UPDATE SET price = excluded.price");
+        $price_stmt = $pdo->prepare("INSERT INTO tile_prices (post_id, product_code, finish_name, tile_size_name, price) VALUES (?, ?, ?, ?, ?)
+                                     ON CONFLICT(post_id, product_code, tile_size_name) DO UPDATE SET price = excluded.price, finish_name = excluded.finish_name");
 
         $meta_insert_stmt = $pdo->prepare("INSERT INTO tiles_meta (post_id, qrcode_description) VALUES (?, ?)
                                            ON CONFLICT(post_id) DO UPDATE SET qrcode_description = excluded.qrcode_description");
 
-        $finish_meta_insert_stmt = $pdo->prepare("INSERT INTO tile_finishes_meta (post_id, finish_name, slip_rating) VALUES (?, ?, ?)
-                                                  ON CONFLICT(post_id, finish_name) DO UPDATE SET slip_rating = excluded.slip_rating");
+        $finish_meta_insert_stmt = $pdo->prepare("INSERT INTO tile_finishes_meta (post_id, product_code, finish_name, slip_rating) VALUES (?, ?, ?, ?)
+                                                  ON CONFLICT(post_id, product_code) DO UPDATE SET slip_rating = excluded.slip_rating, finish_name = excluded.finish_name");
 
         $get_meta_stmt = $pdo->prepare("SELECT * FROM tiles_meta WHERE post_id = ?");
 
@@ -463,10 +525,10 @@ if ($action === 'import_by_code') {
             $finish_name = $code_map[$code]['finish_name'];
 
             // Update tile_prices
-            $price_stmt->execute([$post_id, $finish_name, $size, $price]);
+            $price_stmt->execute([$post_id, $code, $finish_name, $size, $price]);
 
             if (trim($slip_rate) !== '') {
-                $finish_meta_insert_stmt->execute([$post_id, $finish_name, $slip_rate]);
+                $finish_meta_insert_stmt->execute([$post_id, $code, $finish_name, $slip_rate]);
             }
 
             if (trim($description) !== '') {

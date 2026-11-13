@@ -2,9 +2,10 @@
 require_once __DIR__ . '/bootstrap.php';
 
 $post_id = (int) ($_GET['post_id'] ?? 0);
+$code = $_GET['code'] ?? '';
 $finish_name = $_GET['finish'] ?? '';
 
-if (!$post_id || !$finish_name) {
+if (!$post_id || (trim($code) === '' && trim($finish_name) === '')) {
     die("<div style='padding:20px; font-family:sans-serif; text-align:center;'>Invalid request.</div>");
 }
 
@@ -14,31 +15,55 @@ if (!$tile) {
 }
 
 $finishes = function_exists('get_field') ? get_field('tile_finish', $post_id) : [];
-$selected_finish = null;
+$matched_finishes = [];
 if ($finishes && is_array($finishes)) {
-    foreach ($finishes as $f) {
-        if (($f['finish_name'] ?? '') === $finish_name) {
-            $selected_finish = $f;
-            break;
+    if (trim($code) !== '') {
+        foreach ($finishes as $f) {
+            if (($f['product_code'] ?? '') === $code) {
+                $matched_finishes[] = $f;
+                break;
+            }
+        }
+    } else {
+        // Legacy QR code fallback: match all finishes sharing the requested finish_name
+        foreach ($finishes as $f) {
+            if (($f['finish_name'] ?? '') === $finish_name) {
+                $matched_finishes[] = $f;
+            }
         }
     }
 }
 
-if (!$selected_finish) {
+if (empty($matched_finishes)) {
     die("<div style='padding:20px; font-family:sans-serif; text-align:center;'>Finish not found.</div>");
 }
 
-$product_code = $selected_finish['product_code'] ?? '';
-$sizes = $selected_finish['tile_size'] ?? [];
-$virtual_threater_url = $selected_finish['visual_theatre'] ?? [];
-
 global $pdo;
-$stmt = $pdo->prepare("SELECT tile_size_name, price FROM tile_prices WHERE post_id = ? AND finish_name = ?");
-$stmt->execute([$post_id, $finish_name]);
-$prices_raw = $stmt->fetchAll(PDO::FETCH_ASSOC);
-$prices = [];
-foreach ($prices_raw as $row) {
-    $prices[$row['tile_size_name']] = $row['price'];
+$price_by_code_stmt = $pdo->prepare("SELECT tile_size_name, price FROM tile_prices WHERE post_id = ? AND product_code = ?");
+$price_by_finish_stmt = $pdo->prepare("SELECT tile_size_name, price FROM tile_prices WHERE post_id = ? AND product_code = '' AND finish_name = ?");
+
+$display_variants = [];
+foreach ($matched_finishes as $mf) {
+    $mf_code = $mf['product_code'] ?? '';
+    $mf_name = $mf['finish_name'] ?? $finish_name;
+    if (trim((string) $mf_code) !== '') {
+        $price_by_code_stmt->execute([$post_id, $mf_code]);
+        $prices_raw = $price_by_code_stmt->fetchAll(PDO::FETCH_ASSOC);
+    } else {
+        $price_by_finish_stmt->execute([$post_id, $mf_name]);
+        $prices_raw = $price_by_finish_stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+    $prices = [];
+    foreach ($prices_raw as $row) {
+        $prices[$row['tile_size_name']] = $row['price'];
+    }
+    $display_variants[] = [
+        'finish_name' => $mf_name,
+        'product_code' => $mf_code,
+        'sizes' => $mf['tile_size'] ?? [],
+        'virtual_theatre' => $mf['visual_theatre'] ?? [],
+        'prices' => $prices,
+    ];
 }
 
 $wp_url = get_permalink($post_id);
@@ -206,36 +231,43 @@ if (!$thumbnail_url) {
     <div class="container">
         <h1 class="product-title"><?= htmlspecialchars($tile->post_title) ?></h1>
 
-        <div class="product-meta">
-            <div class="meta-item">
-                <span class="meta-value finish-value"><?= htmlspecialchars($finish_name) ?></span>
-                <span class="meta-value">Code: <?= htmlspecialchars($product_code ?: '-') ?></span>
+        <?php $is_multi = count($display_variants) > 1; ?>
+        <?php foreach ($display_variants as $variant): ?>
+            <div class="product-meta">
+                <div class="meta-item">
+                    <span class="meta-value finish-value"><?= htmlspecialchars($variant['finish_name']) ?></span>
+                    <span class="meta-value">Code: <?= htmlspecialchars($variant['product_code'] ?: '-') ?></span>
+                </div>
             </div>
-        </div>
 
-        <div class="price-list">
-            <?php if ($sizes && is_array($sizes)): ?>
-                <?php foreach ($sizes as $size):
-                    $s_name = $size['tile_size_name'] ?? '';
-                    $s_price = $prices[$s_name] ?? '-';
-                    ?>
-                    <div class="price-row">
-                        <span class="size-name"><?= htmlspecialchars($s_name) ?></span>
-                        <span class="price-value"><?= htmlspecialchars($s_price) ?></span>
-                    </div>
-                <?php endforeach; ?>
-            <?php else: ?>
-                <div class="empty-sizes"></div>
+            <div class="price-list">
+                <?php if ($variant['sizes'] && is_array($variant['sizes'])): ?>
+                    <?php foreach ($variant['sizes'] as $size):
+                        $s_name = $size['tile_size_name'] ?? '';
+                        $s_price = $variant['prices'][$s_name] ?? '-';
+                        ?>
+                        <div class="price-row">
+                            <span class="size-name"><?= htmlspecialchars($s_name) ?></span>
+                            <span class="price-value"><?= htmlspecialchars($s_price) ?></span>
+                        </div>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <div class="empty-sizes"></div>
+                <?php endif; ?>
+            </div>
+
+            <?php if ($is_multi && !empty($variant['virtual_theatre']) && is_string($variant['virtual_theatre'])): ?>
+                <a href="<?= htmlspecialchars($variant['virtual_theatre']) ?>" class="btn-visit" style="margin-bottom: 15px;">Virtual Theatre</a>
             <?php endif; ?>
-        </div>
+        <?php endforeach; ?>
 
         <?php if (!empty($qrcode_desc)): ?>
             <div class="qr-desc">
                 <?= $qrcode_desc ?>
             </div>
         <?php endif; ?>
-        <?php if(!empty($virtual_threater_url)): ?>
-            <a href="<?= $virtual_threater_url ?>" class="btn-visit" style="margin-bottom: 10px;">Virtual Theatre</a>
+        <?php if (!$is_multi && !empty($display_variants[0]['virtual_theatre']) && is_string($display_variants[0]['virtual_theatre'])): ?>
+            <a href="<?= htmlspecialchars($display_variants[0]['virtual_theatre']) ?>" class="btn-visit" style="margin-bottom: 10px;">Virtual Theatre</a>
         <?php endif; ?>
         <a href="<?= $wp_url ?>?utm_source=showroom&utm_medium=qrcode&utm_campaign=showroom" class="btn-visit">View Collection</a>
     </div>
